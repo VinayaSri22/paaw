@@ -556,7 +556,6 @@ def register_routes(app: FastAPI):
             html_parts.append(f'''
                 <div class="server-unit {status_class}">
                     <div class="server-header" onclick="toggleServer(this)">
-                        <div class="server-icon bg-gradient-to-br from-orange-500/20 to-amber-600/20" style="border: 1px solid rgba(249, 115, 22, 0.2);">🔌</div>
                         <div class="server-info">
                             <div class="server-name">{mcp.get("name", "Unknown")}</div>
                             <div class="server-desc">{mcp.get("description", "")[:50]}</div>
@@ -579,11 +578,11 @@ def register_routes(app: FastAPI):
                         <button class="action-btn action-btn-secondary" 
                                 onclick="testMCPConnection('{mcp.get("name")}', this)"
                                 {"disabled" if not enabled else ""}>
-                            🔍 Test
+                            Test
                         </button>
                         <button class="action-btn action-btn-secondary"
                                 onclick="editMCP('{mcp.get("name")}')">
-                            ✏️ Edit
+                            Edit
                         </button>
                         <button class="action-btn {"action-btn-danger" if enabled else "action-btn-primary"}" 
                                 onclick="toggleMCP('{mcp.get("name")}')">
@@ -682,7 +681,6 @@ def register_routes(app: FastAPI):
             html_parts.append(f'''
                 <div class="server-unit online">
                     <div class="server-header" onclick="toggleServer(this)">
-                        <div class="server-icon bg-gradient-to-br from-amber-500/20 to-yellow-600/20" style="border: 1px solid rgba(245, 158, 11, 0.2);">🧠</div>
                         <div class="server-info">
                             <div class="server-name">{skill.get("title", skill.get("name", "Unknown"))}</div>
                             <div class="server-desc">{skill.get("persona", "")[:50]}</div>
@@ -699,7 +697,7 @@ def register_routes(app: FastAPI):
                     <div class="server-actions">
                         <button class="action-btn action-btn-secondary"
                                 onclick="editSkill('{skill.get("name", "")}')">
-                            ✏️ Edit
+                            Edit
                         </button>
                         <button class="action-btn action-btn-danger"
                                 onclick="deleteSkill('{skill.get("name", "")}')">
@@ -730,7 +728,6 @@ def register_routes(app: FastAPI):
             html_parts.append(f'''
                 <div class="server-unit {status_class}">
                     <div class="server-header" onclick="toggleServer(this)">
-                        <div class="server-icon bg-gradient-to-br from-orange-600/20 to-red-500/20" style="border: 1px solid rgba(234, 88, 12, 0.2);">⏰</div>
                         <div class="server-info">
                             <div class="server-name">{job.get("title", job.get("name", "Unknown"))}</div>
                             <div class="server-desc">{job.get("schedule", "")}</div>
@@ -750,11 +747,11 @@ def register_routes(app: FastAPI):
                     <div class="server-actions">
                         <button class="action-btn action-btn-secondary"
                                 onclick="runJob('{job.get("name")}')">
-                            ▶ Run Now
+                            Run Now
                         </button>
                         <button class="action-btn action-btn-secondary"
                                 onclick="editJob('{job.get("name")}')">
-                            ✏️ Edit
+                            Edit
                         </button>
                         <button class="action-btn {"action-btn-danger" if status == "active" else "action-btn-primary"}"
                                 onclick="toggleJob('{job.get("name")}')">
