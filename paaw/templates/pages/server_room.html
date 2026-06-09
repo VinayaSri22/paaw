@@ -36,13 +36,50 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
+    <!-- Alpine.js for theme toggle -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
 <style>
-    /* Server Room Theme - PAAW Aligned */
+    /* Server Room Theme - PAAW Aligned with Dark/Light Mode */
+    :root {
+        --bg-primary: #050507;
+        --bg-secondary: #09090b;
+        --bg-tertiary: #0c0c0f;
+        --bg-card: #111114;
+        --border-color: #27272a;
+        --border-hover: #3f3f46;
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --text-dim: #52525b;
+        --grid-line: rgba(255, 149, 0, 0.02);
+    }
+    
+    .light-theme {
+        --bg-primary: #fafafa;
+        --bg-secondary: #f4f4f5;
+        --bg-tertiary: #ffffff;
+        --bg-card: #ffffff;
+        --border-color: #e4e4e7;
+        --border-hover: #d4d4d8;
+        --text-primary: #18181b;
+        --text-secondary: #3f3f46;
+        --text-muted: #52525b;
+        --text-dim: #71717a;
+        --grid-line: rgba(255, 149, 0, 0.03);
+        --shadow-color: rgba(0, 0, 0, 0.08);
+    }
+    
+    .dark-theme {
+        --shadow-color: rgba(255, 149, 0, 0.05);
+    }
+    
     body {
-        background: #050507;
+        background: var(--bg-primary);
         min-height: 100vh;
-        color: #fafafa;
+        color: var(--text-primary);
         font-family: system-ui, -apple-system, sans-serif;
+        transition: background 0.3s ease, color 0.3s ease;
     }
     
     /* Subtle grid background */
@@ -50,8 +87,8 @@
         position: fixed;
         inset: 0;
         background-image: 
-            linear-gradient(rgba(255, 149, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 149, 0, 0.02) 1px, transparent 1px);
+            linear-gradient(var(--grid-line) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
         background-size: 40px 40px;
         pointer-events: none;
         z-index: 0;
@@ -59,12 +96,17 @@
     
     /* Rack Container */
     .rack {
-        background: linear-gradient(180deg, #111114 0%, #09090b 100%);
-        border: 1px solid #27272a;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
         border-radius: 16px;
-        box-shadow: 0 0 40px rgba(255, 149, 0, 0.05);
+        box-shadow: 0 4px 24px var(--shadow-color);
         position: relative;
         overflow: visible;
+        transition: all 0.3s ease;
+    }
+    
+    .light-theme .rack {
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
     }
     
     .rack::before {
@@ -79,12 +121,18 @@
     }
     
     .rack-title {
-        background: linear-gradient(90deg, #111114, #18181b);
-        border-bottom: 1px solid #27272a;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border-color);
         padding: 1rem 1.5rem;
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        transition: all 0.3s ease;
+        border-radius: 16px 16px 0 0;
+    }
+    
+    .light-theme .rack-title {
+        background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
     }
     
     .rack-title-icon {
@@ -99,8 +147,8 @@
     
     /* Server Unit */
     .server-unit {
-        background: #0c0c0f;
-        border: 1px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
         border-radius: 12px;
         margin: 0.75rem;
         transition: all 0.3s ease;
@@ -108,10 +156,18 @@
         overflow: hidden;
     }
     
+    .light-theme .server-unit {
+        background: var(--bg-secondary);
+    }
+    
     .server-unit:hover {
-        border-color: #3f3f46;
-        box-shadow: 0 0 20px rgba(255, 149, 0, 0.1);
+        border-color: var(--border-hover);
+        box-shadow: 0 4px 16px var(--shadow-color);
         transform: translateX(4px);
+    }
+    
+    .light-theme .server-unit:hover {
+        box-shadow: 0 4px 16px rgba(255, 149, 0, 0.12);
     }
     
     .server-unit::before {
@@ -121,7 +177,7 @@
         top: 0;
         bottom: 0;
         width: 4px;
-        background: #27272a;
+        background: var(--border-color);
         transition: background 0.3s ease;
     }
     
@@ -167,13 +223,13 @@
     
     .server-name {
         font-weight: 600;
-        color: #fafafa;
+        color: var(--text-primary);
         font-size: 1rem;
         margin-bottom: 0.25rem;
     }
     
     .server-desc {
-        color: #71717a;
+        color: var(--text-muted);
         font-size: 0.8rem;
         white-space: nowrap;
         overflow: hidden;
@@ -196,16 +252,34 @@
         border: 1px solid rgba(255, 149, 0, 0.3);
     }
     
+    .light-theme .status-online {
+        background: rgba(255, 149, 0, 0.12);
+        color: #d97706;
+        border: 1px solid rgba(217, 119, 6, 0.4);
+    }
+    
     .status-offline {
         background: rgba(239, 68, 68, 0.15);
         color: #ef4444;
         border: 1px solid rgba(239, 68, 68, 0.3);
     }
     
+    .light-theme .status-offline {
+        background: rgba(239, 68, 68, 0.1);
+        color: #dc2626;
+        border: 1px solid rgba(220, 38, 38, 0.4);
+    }
+    
     .status-paused {
         background: rgba(234, 179, 8, 0.15);
         color: #eab308;
         border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+    
+    .light-theme .status-paused {
+        background: rgba(234, 179, 8, 0.1);
+        color: #ca8a04;
+        border: 1px solid rgba(202, 138, 4, 0.4);
     }
     
     /* Server Details */
@@ -222,7 +296,7 @@
         display: flex;
         justify-content: space-between;
         padding: 0.5rem 0;
-        border-bottom: 1px solid #18181b;
+        border-bottom: 1px solid var(--bg-card);
         font-size: 0.85rem;
     }
     
@@ -231,11 +305,11 @@
     }
     
     .detail-label {
-        color: #52525b;
+        color: var(--text-dim);
     }
     
     .detail-value {
-        color: #a1a1aa;
+        color: var(--text-secondary);
         font-family: monospace;
     }
     
@@ -244,8 +318,14 @@
         display: flex;
         gap: 0.5rem;
         padding: 0.75rem 1rem;
-        background: rgba(0, 0, 0, 0.3);
-        border-top: 1px solid #18181b;
+        background: rgba(0, 0, 0, 0.15);
+        border-top: 1px solid var(--border-color);
+        border-radius: 0 0 12px 12px;
+    }
+    
+    .light-theme .server-actions {
+        background: rgba(0, 0, 0, 0.03);
+        border-top: 1px solid var(--border-color);
     }
     
     .action-btn {
@@ -273,23 +353,39 @@
         border-color: rgba(239, 68, 68, 0.3);
     }
     
+    .light-theme .action-btn-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: #dc2626;
+        border-color: rgba(220, 38, 38, 0.3);
+    }
+    
     .action-btn-danger:hover {
         background: rgba(239, 68, 68, 0.25);
     }
     
     .action-btn-secondary {
         background: rgba(255, 149, 0, 0.1);
-        color: #ffb340;
+        color: #ff9500;
         border-color: rgba(255, 149, 0, 0.3);
+    }
+    
+    .light-theme .action-btn-secondary {
+        background: rgba(255, 149, 0, 0.08);
+        color: #d97706;
+        border-color: rgba(217, 119, 6, 0.3);
     }
     
     .action-btn-secondary:hover {
         background: rgba(255, 149, 0, 0.2);
     }
     
+    .light-theme .action-btn-secondary:hover {
+        background: rgba(255, 149, 0, 0.15);
+    }
+    
     /* Add New Button */
     .add-server-btn {
-        border: 2px dashed #27272a;
+        border: 2px dashed var(--border-color);
         background: transparent;
         border-radius: 12px;
         margin: 0.75rem;
@@ -298,7 +394,7 @@
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        color: #52525b;
+        color: var(--text-dim);
         cursor: pointer;
         transition: all 0.3s ease;
         box-sizing: border-box;
@@ -379,21 +475,25 @@
         transition: all 0.3s ease;
     }
     
+    .light-theme .modal-overlay {
+        background: rgba(244, 244, 245, 0.9);
+    }
+    
     .modal-overlay.active {
         opacity: 1;
         visibility: visible;
     }
     
     .modal {
-        background: linear-gradient(180deg, #111114 0%, #09090b 100%);
-        border: 1px solid #27272a;
+        background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+        border: 1px solid var(--border-color);
         border-radius: 20px;
         width: 90%;
         max-width: 600px;
         max-height: 90vh;
         overflow-y: auto;
         transform: scale(0.9);
-        transition: transform 0.3s ease;
+        transition: transform 0.3s ease, background 0.3s ease;
         box-shadow: 0 0 60px rgba(255, 149, 0, 0.1);
     }
     
@@ -403,7 +503,7 @@
     
     .modal-header {
         padding: 1.5rem;
-        border-bottom: 1px solid #27272a;
+        border-bottom: 1px solid var(--border-color);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -412,7 +512,7 @@
     .modal-title {
         font-size: 1.25rem;
         font-weight: 600;
-        color: #fafafa;
+        color: var(--text-primary);
     }
     
     .modal-close {
@@ -421,12 +521,16 @@
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.05);
         border: none;
-        color: #71717a;
+        color: var(--text-muted);
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         transition: all 0.2s ease;
+    }
+    
+    .light-theme .modal-close {
+        background: rgba(0, 0, 0, 0.05);
     }
     
     .modal-close:hover {
@@ -445,7 +549,7 @@
     
     .form-label {
         display: block;
-        color: #71717a;
+        color: var(--text-muted);
         font-size: 0.85rem;
         margin-bottom: 0.5rem;
     }
@@ -453,12 +557,12 @@
     .form-input, .form-textarea, .form-select {
         width: 100%;
         padding: 0.75rem 1rem;
-        background: #0c0c0f;
-        border: 1px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
         border-radius: 10px;
-        color: #fafafa;
+        color: var(--text-primary);
         font-size: 0.9rem;
-        transition: border-color 0.2s ease;
+        transition: border-color 0.2s ease, background 0.3s ease;
     }
     
     .form-input:focus, .form-textarea:focus, .form-select:focus {
@@ -473,7 +577,7 @@
     }
     
     .form-hint {
-        color: #52525b;
+        color: var(--text-dim);
         font-size: 0.75rem;
         margin-top: 0.25rem;
     }
@@ -483,10 +587,16 @@
         display: flex;
         gap: 2rem;
         padding: 1.25rem 1.5rem;
-        background: #0c0c0f;
-        border: 1px solid #27272a;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
         border-radius: 16px;
         margin-bottom: 2rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 12px var(--shadow-color);
+    }
+    
+    .light-theme .stats-bar {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
     }
     
     .stat-item {
@@ -503,7 +613,7 @@
     }
     
     .stat-label {
-        color: #52525b;
+        color: var(--text-dim);
         font-size: 0.8rem;
         text-transform: uppercase;
         letter-spacing: 1px;
@@ -514,10 +624,17 @@
         text-shadow: 0 0 20px rgba(255, 149, 0, 0.3);
     }
     
+    .light-theme .glow-text {
+        text-shadow: none;
+    }
+    
+    /* Alpine.js cloak */
+    [x-cloak] { display: none !important; }
+    
     /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #ff9500; }
     
     /* Utility classes */
@@ -541,7 +658,9 @@
     }
 </style>
 </head>
-<body>
+<body x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false' }" 
+      x-init="$watch('darkMode', val => { localStorage.setItem('darkMode', val); document.documentElement.classList.toggle('dark', val) }); document.documentElement.classList.toggle('dark', darkMode)"
+      :class="darkMode ? 'dark-theme' : 'light-theme'">
 <div class="relative">
     <div class="grid-bg"></div>
     
@@ -553,13 +672,27 @@
                     <span class="text-2xl">🖥️</span>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold text-white glow-text">Server Room</h1>
-                    <p class="text-zinc-500 text-sm">Manage MCP Servers, Skills, and Jobs</p>
+                    <h1 class="text-2xl font-bold glow-text" :class="darkMode ? 'text-white' : 'text-zinc-800'">Server Room</h1>
+                    <p class="text-sm" :class="darkMode ? 'text-zinc-500' : 'text-zinc-600'">Manage MCP Servers, Skills, and Jobs</p>
                 </div>
             </div>
-            <a href="/dashboard" class="action-btn action-btn-secondary flex items-center gap-2">
-                <span>←</span> Back to Dashboard
-            </a>
+            <div class="flex items-center gap-3">
+                <!-- Theme Toggle -->
+                <button @click="darkMode = !darkMode" 
+                        class="p-2 rounded-full transition-all hover:scale-110 active:scale-95"
+                        :class="darkMode ? 'text-amber-400 hover:text-amber-300' : 'text-amber-600 hover:text-amber-500'"
+                        :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'">
+                    <svg x-show="darkMode" x-cloak class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
+                    </svg>
+                    <svg x-show="!darkMode" x-cloak class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+                <a href="/dashboard" class="action-btn action-btn-secondary flex items-center gap-2">
+                    <span>←</span> Back to Dashboard
+                </a>
+            </div>
         </div>
         
         <!-- Stats Bar -->
@@ -586,8 +719,8 @@
                 <div class="rack-title">
                     <div class="rack-title-icon bg-gradient-to-br from-orange-500/20 to-amber-600/20 border border-orange-500/30">🔌</div>
                     <div>
-                        <div class="text-white font-semibold">MCP Servers</div>
-                        <div class="text-zinc-500 text-sm">External tool providers</div>
+                        <div class="font-semibold" :class="darkMode ? 'text-white' : 'text-zinc-800'">MCP Servers</div>
+                        <div class="text-sm" :class="darkMode ? 'text-zinc-500' : 'text-zinc-600'">External tool providers</div>
                     </div>
                 </div>
                 <div id="mcp-servers-list" hx-get="/api/server-room/mcps" hx-trigger="load" hx-swap="innerHTML">
@@ -604,8 +737,8 @@
                 <div class="rack-title">
                     <div class="rack-title-icon bg-gradient-to-br from-amber-500/20 to-yellow-600/20 border border-amber-500/30">🧠</div>
                     <div>
-                        <div class="text-white font-semibold">Skills</div>
-                        <div class="text-zinc-500 text-sm">Agent capabilities</div>
+                        <div class="font-semibold" :class="darkMode ? 'text-white' : 'text-zinc-800'">Skills</div>
+                        <div class="text-sm" :class="darkMode ? 'text-zinc-500' : 'text-zinc-600'">Agent capabilities</div>
                     </div>
                 </div>
                 <div id="skills-list" hx-get="/api/server-room/skills" hx-trigger="load" hx-swap="innerHTML">
@@ -622,8 +755,8 @@
                 <div class="rack-title">
                     <div class="rack-title-icon bg-gradient-to-br from-orange-600/20 to-red-500/20 border border-orange-600/30">⏰</div>
                     <div>
-                        <div class="text-white font-semibold">Scheduled Jobs</div>
-                        <div class="text-zinc-500 text-sm">Automated tasks</div>
+                        <div class="font-semibold" :class="darkMode ? 'text-white' : 'text-zinc-800'">Scheduled Jobs</div>
+                        <div class="text-sm" :class="darkMode ? 'text-zinc-500' : 'text-zinc-600'">Automated tasks</div>
                     </div>
                 </div>
                 <div id="jobs-list" hx-get="/api/server-room/jobs" hx-trigger="load" hx-swap="innerHTML">
@@ -1127,11 +1260,11 @@
     .step-indicator {
         flex: 1;
         padding: 0.5rem 1rem;
-        background: #18181b;
+        background: var(--bg-card);
         border-radius: 8px;
         text-align: center;
         font-size: 0.8rem;
-        color: #52525b;
+        color: var(--text-dim);
         transition: all 0.2s;
     }
     .step-indicator.active {
@@ -1158,15 +1291,15 @@
         padding: 0.5rem;
     }
     .skill-card {
-        background: #0c0c0f;
-        border: 2px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 2px solid var(--border-color);
         border-radius: 10px;
         padding: 0.75rem;
         cursor: pointer;
         transition: all 0.2s;
     }
     .skill-card:hover {
-        border-color: #3f3f46;
+        border-color: var(--border-hover);
     }
     .skill-card.selected {
         border-color: #ff9500;
@@ -1174,12 +1307,12 @@
     }
     .skill-card-name {
         font-weight: 600;
-        color: #fafafa;
+        color: var(--text-primary);
         font-size: 0.9rem;
         margin-bottom: 0.25rem;
     }
     .skill-card-desc {
-        color: #71717a;
+        color: var(--text-muted);
         font-size: 0.75rem;
     }
     
@@ -1196,8 +1329,8 @@
         align-items: center;
         gap: 0.25rem;
         padding: 0.75rem;
-        background: #0c0c0f;
-        border: 2px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 2px solid var(--border-color);
         border-radius: 10px;
         cursor: pointer;
         transition: all 0.2s;
@@ -1207,7 +1340,7 @@
         background: rgba(255, 149, 0, 0.05);
     }
     .schedule-icon { font-size: 1.25rem; }
-    .schedule-text { font-size: 0.75rem; color: #a1a1aa; }
+    .schedule-text { font-size: 0.75rem; color: var(--text-secondary); }
     
     /* Notify options */
     .notify-options {
@@ -1222,25 +1355,25 @@
         justify-content: center;
         gap: 0.5rem;
         padding: 0.75rem;
-        background: #0c0c0f;
-        border: 2px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 2px solid var(--border-color);
         border-radius: 10px;
         cursor: pointer;
         transition: all 0.2s;
         font-size: 0.9rem;
-        color: #a1a1aa;
+        color: var(--text-secondary);
     }
     .notify-option input:checked + .notify-card {
         border-color: #ff9500;
         background: rgba(255, 149, 0, 0.05);
-        color: #fafafa;
+        color: var(--text-primary);
     }
     .notify-icon { font-size: 1.25rem; }
     
     /* Review section */
     .review-card {
-        background: #0c0c0f;
-        border: 1px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
         border-radius: 12px;
         padding: 1rem;
     }
@@ -1249,16 +1382,16 @@
         justify-content: space-between;
         align-items: flex-start;
         padding: 0.5rem 0;
-        border-bottom: 1px solid #18181b;
+        border-bottom: 1px solid var(--bg-card);
     }
     .review-item:last-child { border-bottom: none; }
     .review-label {
-        color: #52525b;
+        color: var(--text-dim);
         font-size: 0.85rem;
         min-width: 80px;
     }
     .review-value {
-        color: #fafafa;
+        color: var(--text-primary);
         font-size: 0.85rem;
         text-align: right;
         flex: 1;
@@ -1297,8 +1430,8 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem;
-        background: #0c0c0f;
-        border: 1px solid #27272a;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
         border-radius: 6px;
         margin-bottom: 0.5rem;
     }
@@ -1306,7 +1439,7 @@
         accent-color: #ff9500;
     }
     .tool-checkbox label {
-        color: #a1a1aa;
+        color: var(--text-secondary);
         font-size: 0.85rem;
         font-family: monospace;
     }
@@ -1315,17 +1448,17 @@
     .tab-btn {
         flex: 1;
         padding: 0.75rem 1rem;
-        background: #18181b;
-        border: 1px solid #27272a;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
-        color: #71717a;
+        color: var(--text-muted);
         font-size: 0.85rem;
         cursor: pointer;
         transition: all 0.2s;
     }
     .tab-btn:hover {
-        background: #27272a;
-        color: #a1a1aa;
+        background: var(--border-color);
+        color: var(--text-secondary);
     }
     .tab-btn.active {
         background: rgba(255, 149, 0, 0.1);
@@ -1345,9 +1478,9 @@
     .add-item-btn {
         padding: 0.5rem 1rem;
         background: transparent;
-        border: 1px dashed #27272a;
+        border: 1px dashed var(--border-color);
         border-radius: 6px;
-        color: #52525b;
+        color: var(--text-dim);
         font-size: 0.8rem;
         cursor: pointer;
         transition: all 0.2s;
@@ -1387,19 +1520,19 @@
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 0.8rem;
         line-height: 1.5;
-        background: #09090b;
+        background: var(--bg-secondary);
         min-height: 300px;
     }
     
     /* JSON preview */
     .json-preview {
-        background: #09090b;
-        border: 1px solid #27272a;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 1rem;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 0.75rem;
-        color: #a1a1aa;
+        color: var(--text-secondary);
         overflow-x: auto;
         max-height: 150px;
         white-space: pre-wrap;
@@ -1455,7 +1588,7 @@
     }
     
     .modal-footer {
-        background: #111114;
+        background: var(--bg-card);
     }
     
     /* Inline test results */
