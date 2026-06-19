@@ -12,8 +12,8 @@ models:
   # Powerful for complex reasoning
   reasoning: claude-sonnet-4-20250514
   
-  # Local model for private data (requires Ollama)
-  private: llama3.2
+  # Local model for private data (requires Ollama with Gemma)
+  private: ollama/gemma
   
   # Embeddings
   embedding: text-embedding-3-small
