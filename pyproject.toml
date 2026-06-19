@@ -24,6 +24,7 @@ dependencies = [
     
     # LLM
     "litellm>=1.40.0",
+    "python-multipart>=0.0.6",
     
     # Database
     "asyncpg>=0.29.0",

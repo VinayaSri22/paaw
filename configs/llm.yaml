@@ -13,7 +13,7 @@ models:
   reasoning: claude-sonnet-4-20250514
   
   # Local model for private data (requires Ollama)
-  private: ollama/llama3.2
+  private: llama3.2
   
   # Embeddings
   embedding: text-embedding-3-small

@@ -167,6 +167,19 @@ class LLM:
             if tools:
                 kwargs["tools"] = tools
 
+            # If using a local Ollama service, ensure LiteLLM recognizes the
+            # provider by prefixing the model string with 'ollama/'. The actual
+            # local Ollama model file is named like 'llama3.2' (no prefix), but
+            # LiteLLM expects a provider namespace in the model string to route
+            # the request to the correct provider.
+            model_name = kwargs.get("model", "")
+            try:
+                if settings.llm.ollama_base_url and model_name and not model_name.startswith("ollama/"):
+                    if model_name.startswith("llama"):
+                        kwargs["model"] = f"ollama/{model_name}"
+            except Exception:
+                pass
+
             response = await acompletion(**kwargs)
             
             message = response.choices[0].message

@@ -71,8 +71,9 @@ setup_env() {
     
     # Verify API key exists
     if ! grep -qE "^(ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY)=.+" .env 2>/dev/null; then
-        echo -e "${RED}Warning: No API key found in .env${NC}"
-        echo "PAAW needs an LLM API key to work."
+        echo -e "${YELLOW}Note: No API key found in .env${NC}"
+        echo "PAAW can still run using the bundled local Ollama fallback service."
+        echo "Add OPENAI_API_KEY or ANTHROPIC_API_KEY only if you want cloud provider models."
         echo ""
     fi
 }

@@ -81,9 +81,12 @@ Predictable, repeatable automation — without the token burn. This isn't "ask i
 
 ### Prerequisites
 - Docker & Docker Compose
-- An LLM API key (Anthropic, OpenAI, or Groq)
+- Optional: an LLM API key (Anthropic, OpenAI, or Groq)
 
-> **Note:** PAAW relies heavily on tool calling. Use a model that supports it well — smaller models without strong tool-use capabilities will not work reliably. I recommend **Claude Sonnet 4** (`claude-sonnet-4-6`) — this entire app was built and tested on it, and I've spent about $10 over 2 weeks of active development and daily use.
+> **Note:** If no API key is provided, PAAW can still run using the bundled local Ollama fallback model.
+> Use `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GROQ_API_KEY` only when you want a cloud provider.
+
+> **Note:** PAAW relies heavily on tool calling. Use a model that supports it well — smaller models without strong tool-use capabilities will not work reliably. I recommend **Claude Sonnet 4** (`claude-sonnet-4-6`) for cloud use, and **llama3.2** (local Ollama) for local fallback inside Docker.
 
 ### Setup
 
@@ -150,10 +153,12 @@ paaw jobs list
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `ANTHROPIC_API_KEY` | Anthropic API key | One of these |
-| `OPENAI_API_KEY` | OpenAI API key | required |
-| `GROQ_API_KEY` | Groq API key | |
-| `LLM_DEFAULT_MODEL` | Model to use (default: `claude-sonnet-4-6`) | No |
+| `ANTHROPIC_API_KEY` | Anthropic API key | Optional (if using cloud)
+| `OPENAI_API_KEY` | OpenAI API key | Optional (if using cloud)
+| `GROQ_API_KEY` | Groq API key | Optional (if using cloud)
+| `OLLAMA_BASE_URL` | Local Ollama service URL | Optional
+| `LLM_DEFAULT_MODEL` | Model to use (default: `llama3.2` — local Ollama) | No |
+| `LLM_REASONING_MODEL` | Optional separate reasoning model | No |
 | `DATABASE_URL` | PostgreSQL connection string | Auto in Docker |
 | `DISCORD_TOKEN` | Discord bot token for notifications | No |
 

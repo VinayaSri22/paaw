@@ -42,6 +42,12 @@ _graph_db = None
 # Jinja2 templates
 templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+# Disable Jinja2 template caching to avoid 'unhashable type: dict' errors when
+# the environment attempts to cache templates using unhashable keys.
+try:
+    templates.env.cache = None
+except Exception:
+    pass
 
 # Persistent agent for chat session (maintains conversation context)
 _chat_agent: Agent | None = None
@@ -1876,7 +1882,7 @@ timeout_minutes: 30
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard(request: Request):
         """Main dashboard page."""
-        return templates.TemplateResponse("base_new.html", {
+        return templates.TemplateResponse(request, "base_new.html", {
             "request": request,
             "version": __version__,
         })
@@ -1884,7 +1890,7 @@ timeout_minutes: 30
     @app.get("/server-room", response_class=HTMLResponse)
     async def server_room(request: Request):
         """Server Room - manage MCPs, Skills, and Jobs."""
-        return templates.TemplateResponse("pages/server_room.html", {
+        return templates.TemplateResponse(request, "pages/server_room.html", {
             "request": request,
             "version": __version__,
         })
@@ -1892,7 +1898,7 @@ timeout_minutes: 30
     @app.get("/viz", response_class=HTMLResponse)
     async def viz_page(request: Request):
         """Graph visualization page."""
-        return templates.TemplateResponse("base_new.html", {
+        return templates.TemplateResponse(request, "base_new.html", {
             "request": request,
             "version": __version__,
         })
@@ -2086,7 +2092,7 @@ timeout_minutes: 30
     @app.get("/onboarding", response_class=HTMLResponse)
     async def onboarding_page(request: Request):
         """Onboarding page."""
-        return templates.TemplateResponse("base_new.html", {
+        return templates.TemplateResponse(request, "base_new.html", {
             "request": request,
             "version": __version__,
             "page": "onboarding",
