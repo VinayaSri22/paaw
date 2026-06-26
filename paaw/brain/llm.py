@@ -41,6 +41,7 @@ class LLM:
     - Anthropic (Claude)
     - Local models via Ollama
     - Any LiteLLM-supported provider
+    - Fallback to lightweight local model when primary fails
     """
 
     def __init__(
@@ -48,10 +49,24 @@ class LLM:
         model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        use_fallback: bool = False,
     ):
-        self.model = model or settings.llm.default_model
+        # Check if using fallback mode
+        self._use_fallback = use_fallback
+        
+        if use_fallback and settings.llm.fallback_model:
+            self.model = settings.llm.fallback_model
+            self.max_tokens = settings.llm.fallback_max_tokens
+            self._disable_cache = settings.llm.fallback_disable_cache
+            self._api_base = settings.llm.fallback_api_base
+            logger.info("LLM initialized in fallback mode", model=self.model, max_tokens=self.max_tokens)
+        else:
+            self.model = model or settings.llm.default_model
+            self.max_tokens = max_tokens or settings.llm.max_tokens
+            self._disable_cache = settings.llm.disable_prompt_cache
+            self._api_base = None
+        
         self.temperature = temperature or settings.llm.temperature
-        self.max_tokens = max_tokens or settings.llm.max_tokens
 
         # Set API keys if available
         self._setup_api_keys()
@@ -66,7 +81,10 @@ class LLM:
         if settings.llm.anthropic_api_key:
             os.environ["ANTHROPIC_API_KEY"] = settings.llm.anthropic_api_key
 
-        if settings.llm.ollama_base_url:
+        # Set Ollama base URL - use fallback API base if in fallback mode
+        if self._use_fallback and self._api_base:
+            os.environ["OLLAMA_API_BASE"] = self._api_base
+        elif settings.llm.ollama_base_url:
             os.environ["OLLAMA_API_BASE"] = settings.llm.ollama_base_url
 
     def _format_messages(
@@ -107,6 +125,55 @@ class LLM:
             formatted.append(msg_dict)
 
         return formatted
+    
+    def _limit_context(self, messages: list[dict], token_limit: int) -> list[dict]:
+        """
+        Limit context size for lightweight fallback mode.
+        
+        Keeps system prompt + recent messages within token limit.
+        Uses rough estimate of 4 chars per token.
+        """
+        char_limit = token_limit * 4  # Rough estimate
+        
+        # Always keep system prompt if present
+        system_msg = None
+        other_msgs = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_msg = msg
+            else:
+                other_msgs.append(msg)
+        
+        # Calculate system prompt size
+        system_chars = len(system_msg.get("content", "")) if system_msg else 0
+        remaining_chars = char_limit - system_chars
+        
+        # Keep most recent messages that fit
+        kept_msgs = []
+        total_chars = 0
+        for msg in reversed(other_msgs):
+            msg_chars = len(str(msg.get("content", "")))
+            if total_chars + msg_chars <= remaining_chars:
+                kept_msgs.insert(0, msg)
+                total_chars += msg_chars
+            else:
+                break
+        
+        # Combine system prompt with kept messages
+        result = []
+        if system_msg:
+            result.append(system_msg)
+        result.extend(kept_msgs)
+        
+        if len(kept_msgs) < len(other_msgs):
+            logger.info(
+                "Context truncated for fallback mode",
+                original_msgs=len(other_msgs),
+                kept_msgs=len(kept_msgs),
+                token_limit=token_limit,
+            )
+        
+        return result
 
     @retry(
         stop=stop_after_attempt(5),
@@ -147,6 +214,13 @@ class LLM:
             The assistant's response text (or dict if return_full_response=True)
         """
         formatted_messages = self._format_messages(messages, system_prompt)
+        
+        # Apply context limiting for fallback mode (lightweight/stable)
+        if self._use_fallback and settings.llm.fallback_context_limit:
+            formatted_messages = self._limit_context(
+                formatted_messages, 
+                settings.llm.fallback_context_limit
+            )
 
         try:
             logger.info(
@@ -154,6 +228,7 @@ class LLM:
                 model=model or self.model,
                 message_count=len(formatted_messages),
                 has_tools=bool(tools),
+                fallback_mode=self._use_fallback,
             )
 
             kwargs: dict[str, Any] = {
@@ -166,6 +241,18 @@ class LLM:
 
             if tools:
                 kwargs["tools"] = tools
+            
+            # Apply cache control if disabled
+            if self._disable_cache:
+                kwargs["caching"] = False
+                # For Anthropic, also set cache_control headers
+                if "claude" in kwargs["model"].lower() or "anthropic" in kwargs["model"].lower():
+                    kwargs["extra_headers"] = {"anthropic-beta": "no-cache"}
+                logger.debug("Prompt caching disabled for this request")
+            
+            # Apply custom API base for fallback model
+            if self._api_base:
+                kwargs["api_base"] = self._api_base
 
             # If using a local Ollama service, ensure LiteLLM recognizes the
             # provider by prefixing the model string with 'ollama/'. The actual
@@ -215,11 +302,29 @@ class LLM:
             
         except Exception as e:
             logger.error(
-                "LLM request failed (no retry)", 
+                "LLM request failed", 
                 error=str(e), 
                 model=model or self.model,
                 error_type=type(e).__name__,
             )
+            
+            # Try fallback if available and not already using it
+            if not self._use_fallback and settings.llm.fallback_model:
+                logger.info("Attempting fallback to lightweight model", fallback=settings.llm.fallback_model)
+                try:
+                    fallback_llm = LLM(use_fallback=True)
+                    return await fallback_llm.chat(
+                        messages=messages,
+                        system_prompt=system_prompt,
+                        temperature=temperature,
+                        max_tokens=settings.llm.fallback_max_tokens,
+                        tools=tools,
+                        return_full_response=return_full_response,
+                    )
+                except Exception as fallback_error:
+                    logger.error("Fallback also failed", error=str(fallback_error))
+                    raise LLMError(f"Both primary and fallback failed: {e} / {fallback_error}") from e
+            
             raise LLMError(f"LLM request failed: {e}") from e
 
     async def chat_stream(

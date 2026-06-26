@@ -28,6 +28,13 @@ class LLMSettings(BaseSettings):
     # Optional: separate model for complex reasoning (defaults to same)
     reasoning_model: str = Field(default="claude-sonnet-4-6", description="Model for complex reasoning")
     
+    # Fallback model for when primary fails (lightweight/local)
+    fallback_model: str | None = Field(default=None, description="Fallback model when primary fails")
+    fallback_api_base: str | None = Field(default=None, description="API base URL for fallback model")
+    fallback_max_tokens: int = Field(default=1024, description="Reduced max tokens for fallback")
+    fallback_context_limit: int = Field(default=2048, description="Reduced context for fallback")
+    fallback_disable_cache: bool = Field(default=True, description="Disable prompt caching for fallback")
+    
     # Embeddings are optional - will be added in Phase 3 for semantic search
     embedding_model: str | None = Field(default=None, description="Optional embedding model")
 
@@ -40,6 +47,9 @@ class LLMSettings(BaseSettings):
     max_tokens: int = Field(default=4096, description="Max tokens for response")
     temperature: float = Field(default=0.7, ge=0, le=2)
     timeout: int = Field(default=120, description="Request timeout in seconds")
+    
+    # Caching control
+    disable_prompt_cache: bool = Field(default=False, description="Disable prompt caching globally")
 
 
 class DatabaseSettings(BaseSettings):

@@ -13,8 +13,8 @@ services:
       - DATABASE_URL=postgresql://paaw:paaw@postgres:5432/paaw
       - VALKEY_URL=valkey://valkey:6379
       - LOG_LEVEL=INFO
-      - LLM_DEFAULT_MODEL=${LLM_DEFAULT_MODEL:-ollama/gemma}
-      - LLM_REASONING_MODEL=${LLM_REASONING_MODEL:-ollama/gemma}
+      - LLM_DEFAULT_MODEL=${LLM_DEFAULT_MODEL:-ollama/gemma:2b}
+      - LLM_REASONING_MODEL=${LLM_REASONING_MODEL:-ollama/gemma:2b}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://local-llm:11434}
     env_file:
       - .env
@@ -83,7 +83,7 @@ services:
     command: valkey-server --appendonly yes
 
   # =============================================================================
-  # Local LLM fallback service (Ollama)
+  # Local LLM fallback service (Ollama with Gemma 2B - lightweight)
   # =============================================================================
   local-llm:
     build:
@@ -95,12 +95,18 @@ services:
     environment:
       - OLLAMA_ROOT=/root/.ollama
       - OLLAMA_NONINTERACTIVE=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:11434/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
     restart: unless-stopped
+    # Resource limits for stability
+    mem_limit: 6g
+    mem_reservation: 4g
+    cpus: 2.0
 
   # =============================================================================
   # SearXNG - Privacy-respecting meta search engine (no API keys needed!)
