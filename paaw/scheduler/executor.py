@@ -40,6 +40,7 @@ class ExecutionResult:
     should_alert: bool = False
     alert_message: str = ""
     error: str | None = None
+    token_usage: int = 0             # Total tokens used across all LLM calls
 
 
 class JobExecutor:
@@ -151,6 +152,7 @@ class JobExecutor:
         """Actually execute the job (called with lock held)."""
         start_time = datetime.utcnow()
         tools_used = []
+        total_tokens = 0  # Accumulate tokens across all LLM calls
         
         logger.info(f"Executing job: {job.id}", user_id=user_id, skill=job.uses_skill)
         
@@ -258,6 +260,7 @@ class JobExecutor:
                 summary=summary,
                 should_alert=should_alert,
                 alert_message=alert_message,
+                token_usage=total_tokens,
             )
             
             # Store trail in graph
@@ -272,6 +275,7 @@ class JobExecutor:
                 duration=duration,
                 should_alert=should_alert,
                 tools_used=tools_used,
+                token_usage=total_tokens,
             )
             
             return result
@@ -288,6 +292,7 @@ class JobExecutor:
                 tools_used=tools_used,
                 summary=f"Job failed: {str(e)}",
                 error=str(e),
+                token_usage=total_tokens,
             )
             
             await self._store_trail(result, user_id)
@@ -468,6 +473,7 @@ Tool Output:
                     "tools_used": result.tools_used,
                     "alert_sent": result.should_alert,
                     "error": result.error,
+                    "token_usage": result.token_usage,
                 },
             )
             

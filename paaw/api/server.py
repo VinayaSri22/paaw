@@ -56,6 +56,44 @@ async def get_graph_db():
     return _graph_db
 
 
+async def get_job_token_stats(db, job_name: str) -> dict:
+    """Get token usage stats for a job from its Trail nodes."""
+    prefix = f"trail_{job_name}_"
+    try:
+        results = await db._cypher(
+            f"MATCH (t) WHERE t.id STARTS WITH '{db._escape(prefix)}' RETURN t"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to query job tokens for {job_name}: {e}")
+        return {"display": "—", "last": None}
+
+    trail_tokens: list[tuple[str, int]] = []
+    for result in results:
+        node = db._parse_node(result)
+        usage = node.attributes.get("token_usage")
+        if usage is None:
+            continue
+        try:
+            trail_tokens.append((node.id, int(usage)))
+        except (TypeError, ValueError):
+            continue
+
+    if not trail_tokens:
+        return {"display": "—", "last": None}
+
+    trail_tokens.sort(key=lambda item: item[0], reverse=True)
+    values = [tokens for _, tokens in trail_tokens]
+    last = values[0]
+
+    if len(values) >= 2:
+        low, high = min(values), max(values)
+        display = f"{low:,}–{high:,}"
+    else:
+        display = f"{last:,}"
+
+    return {"display": display, "last": last}
+
+
 async def get_or_create_agent() -> Agent:
     """Get or create persistent chat agent."""
     global _chat_agent
@@ -719,29 +757,59 @@ def register_routes(app: FastAPI):
         if not jobs:
             return HTMLResponse('<div class="p-4 text-center text-zinc-600">No jobs configured</div>')
         
+        db = await get_graph_db()
         html_parts = []
         for job in jobs:
+            job_name = job.get("name", "")
             status = job.get("status", "active")
             status_class = "online" if status == "active" else "paused" if status == "paused" else "offline"
             status_badge = "status-online" if status == "active" else "status-paused" if status == "paused" else "status-offline"
+            
+            schedule = job.get("schedule", {})
+            if isinstance(schedule, dict):
+                cron = schedule.get("cron", "")
+                tz = schedule.get("timezone", "")
+                schedule_desc = f"{cron} ({tz})" if cron else "No schedule"
+            else:
+                schedule_desc = str(schedule)
+
+            token_stats = await get_job_token_stats(db, job_name)
+            token_display = token_stats["display"]
+            token_title = (
+                f"Last run: {token_stats['last']:,} tokens"
+                if token_stats["last"] is not None
+                else "No completed runs yet"
+            )
+            token_badge = (
+                f'<span class="token-badge" title="{html.escape(token_title)}">{token_display} tokens</span>'
+                if token_stats["last"] is not None
+                else f'<span class="token-badge token-badge-empty" title="{html.escape(token_title)}">—</span>'
+            )
             
             html_parts.append(f'''
                 <div class="server-unit {status_class}">
                     <div class="server-header" onclick="toggleServer(this)">
                         <div class="server-info">
-                            <div class="server-name">{job.get("title", job.get("name", "Unknown"))}</div>
-                            <div class="server-desc">{job.get("schedule", "")}</div>
+                            <div class="server-name">{html.escape(job.get("title", job_name or "Unknown"))}</div>
+                            <div class="server-desc">{html.escape(schedule_desc)}</div>
                         </div>
-                        <span class="status-badge {status_badge}">{status.title()}</span>
+                        <div class="server-badges">
+                            {token_badge}
+                            <span class="status-badge {status_badge}">{status.title()}</span>
+                        </div>
                     </div>
                     <div class="server-details">
                         <div class="detail-row">
+                            <span class="detail-label">Tokens</span>
+                            <span class="detail-value">{html.escape(token_display if token_stats["last"] is not None else "No runs yet")}</span>
+                        </div>
+                        <div class="detail-row">
                             <span class="detail-label">Skill</span>
-                            <span class="detail-value">{job.get("skill", "none")}</span>
+                            <span class="detail-value">{html.escape(job.get("skill", "none") or "none")}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Goal</span>
-                            <span class="detail-value" style="white-space: normal;">{job.get("goal", "")[:100]}</span>
+                            <span class="detail-value" style="white-space: normal;">{html.escape((job.get("goal", "") or "")[:100])}</span>
                         </div>
                     </div>
                     <div class="server-actions">
@@ -1710,7 +1778,7 @@ timeout_minutes: 30
 
     @app.post("/api/server-room/jobs/{job_name}/run")
     async def run_job_now(job_name: str):
-        """Run a job immediately in the background."""
+        """Run a job immediately and return execution stats."""
         from paaw.scheduler.parser import parse_job_md
         from paaw.scheduler.executor import JobExecutor
         
@@ -1724,30 +1792,40 @@ timeout_minutes: 30
         if not job:
             return JSONResponse({"error": "Failed to parse job"}, status_code=500)
         
-        # Run job in background using asyncio.create_task
-        async def run_job_task():
-            try:
-                logger.info(f"Starting job execution: {job_name}")
-                executor = JobExecutor()
-                await executor.initialize()
-                result = await executor.execute(job)
-                logger.info(f"Job {job_name} completed", status=result.status, duration=result.duration_seconds)
-                
-                # If job has Discord notification, the executor handles it
-                if result.should_alert and result.alert_message:
-                    logger.info(f"Job {job_name} alert: {result.alert_message[:100]}...")
-                    
-            except Exception as e:
-                logger.error(f"Job {job_name} failed: {e}", exc_info=True)
-        
-        # Create the background task in the current event loop
-        asyncio.create_task(run_job_task())
-        
-        logger.info(f"Manual job run started: {job_name}")
-        return JSONResponse({
-            "success": True, 
-            "message": f"Job '{job_name}' is now running in the background. Check logs for progress."
-        })
+        try:
+            logger.info(f"Starting manual job execution: {job_name}")
+            executor = JobExecutor()
+            await executor.initialize()
+            result = await executor.execute(job)
+            await executor.cleanup()
+
+            logger.info(
+                f"Job {job_name} completed",
+                status=result.status,
+                duration=result.duration_seconds,
+                token_usage=result.token_usage,
+            )
+
+            if result.status == "skipped":
+                return JSONResponse({
+                    "success": False,
+                    "message": "Job is already running",
+                })
+
+            message = f"Job '{job_name}' {result.status} in {result.duration_seconds:.1f}s"
+            if result.token_usage:
+                message += f" · {result.token_usage:,} tokens"
+
+            return JSONResponse({
+                "success": result.status == "completed",
+                "message": message,
+                "status": result.status,
+                "token_usage": result.token_usage,
+                "duration_seconds": result.duration_seconds,
+            })
+        except Exception as e:
+            logger.error(f"Job {job_name} failed: {e}", exc_info=True)
+            return JSONResponse({"error": str(e)}, status_code=500)
     
     @app.post("/api/server-room/mcps/{mcp_name}/toggle")
     async def toggle_mcp(mcp_name: str):

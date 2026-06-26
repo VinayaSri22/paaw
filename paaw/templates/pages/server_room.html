@@ -235,6 +235,36 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+
+    .server-badges {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .token-badge {
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 500;
+        background: rgba(99, 102, 241, 0.12);
+        color: #a5b4fc;
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        white-space: nowrap;
+    }
+
+    .light-theme .token-badge {
+        background: rgba(99, 102, 241, 0.08);
+        color: #4f46e5;
+        border: 1px solid rgba(79, 70, 229, 0.2);
+    }
+
+    .token-badge-empty {
+        color: var(--text-dim);
+        background: transparent;
+        border-color: var(--border-color);
+    }
     
     /* Status Indicator */
     .status-badge {
@@ -771,7 +801,7 @@
                         <div class="text-sm" :class="darkMode ? 'text-zinc-500' : 'text-zinc-600'">Automated tasks</div>
                     </div>
                 </div>
-                <div id="jobs-list" hx-get="/api/server-room/jobs" hx-trigger="load" hx-swap="innerHTML">
+                <div id="jobs-list" hx-get="/api/server-room/jobs" hx-trigger="load, every 30s" hx-swap="innerHTML">
                     <div class="p-4 text-center text-zinc-600">Loading...</div>
                 </div>
                 <button class="add-server-btn" onclick="openModal('job')">
@@ -2340,14 +2370,28 @@
     
     // Job actions
     async function runJob(name) {
+        const btn = event?.target;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+        }
         try {
             const response = await fetch(`/api/server-room/jobs/${name}/run`, { method: 'POST' });
             const result = await response.json();
             if (result.success) {
-                alert(result.message || 'Job queued for execution');
+                alert(result.message || 'Job completed');
+                refreshList('jobs-list');
+            } else {
+                alert(result.message || result.error || 'Job failed');
+                refreshList('jobs-list');
             }
         } catch (err) {
             alert('Error running job: ' + err.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+            }
         }
     }
     
