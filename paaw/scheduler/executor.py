@@ -28,6 +28,22 @@ from paaw.tools.mcp_client import MCPClient
 logger = structlog.get_logger()
 
 
+def _normalize_tool_parameters(input_schema: dict | None) -> dict:
+    """Ensure an MCP tool's JSON schema is valid for OpenAI function calling.
+
+    Some MCP servers return `parameters` as `{"type": "object"}` with no
+    `properties` key. Strict providers (e.g. LM Studio) reject the whole
+    request with a 400 unless `properties` is present, so we backfill it.
+    """
+    schema = dict(input_schema) if isinstance(input_schema, dict) else {}
+    if not schema:
+        return {"type": "object", "properties": {}}
+    schema.setdefault("type", "object")
+    if schema.get("type") == "object" and "properties" not in schema:
+        schema["properties"] = {}
+    return schema
+
+
 @dataclass
 class ExecutionResult:
     """Result of job execution."""
@@ -55,8 +71,12 @@ class JobExecutor:
     """
     
     def __init__(self, graph_db=None):
+        from paaw.config import settings
         self.db = graph_db
-        self.llm = LLM()
+        # Jobs are agentic (need solid tool-calling). Allow a dedicated job model
+        # (LLM_JOB_MODEL) so jobs can use a capable model even if chat uses a
+        # small local one. Falls back to default_model when unset.
+        self.llm = LLM(model=settings.llm.job_model)
         
         # MCP client for tool access
         mcp_config = Path(__file__).parent.parent.parent / "mcp" / "servers.json"
@@ -107,7 +127,7 @@ class JobExecutor:
                         "function": {
                             "name": f"{server_name}__{tool['name']}",
                             "description": tool.get("description", ""),
-                            "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
+                            "parameters": _normalize_tool_parameters(tool.get("inputSchema")),
                         }
                     })
             except Exception as e:
@@ -173,8 +193,21 @@ class JobExecutor:
             system_prompt = self._build_system_prompt(job, user_context, skill)
             user_prompt = job.to_prompt()
             
-            # Give LLM all available tools - it's smart enough to use only what it needs
+            # Tool selection: if the job declares the MCP servers it needs
+            # (## Uses Tools), only pass those tools. This keeps the prompt small
+            # (a big tool schema can fill the whole context window of small models
+            # and leave no room to actually call a tool). Empty = all tools.
             job_tools = self._tools_schema
+            if job.uses_tools and self._tools_schema:
+                allowed = set(job.uses_tools)
+                job_tools = [
+                    t for t in self._tools_schema
+                    if t["function"]["name"].split("__", 1)[0] in allowed
+                ]
+                logger.info(
+                    f"Job {job.id} restricted to tools from: {sorted(allowed)} "
+                    f"({len(job_tools)}/{len(self._tools_schema)} tools)"
+                )
             
             # Tool loop - LLM keeps going until it's done (no tool calls)
             # No arbitrary iteration limit - trust the LLM to finish
@@ -193,6 +226,11 @@ class JobExecutor:
                 
                 content = response.get("content", "")
                 tool_calls = response.get("tool_calls")
+                
+                # Accumulate token usage across all LLM calls in this job
+                usage = response.get("usage")
+                if usage:
+                    total_tokens += usage.get("total_tokens", 0) or 0
                 
                 # Done when LLM returns content without requesting tools
                 if not tool_calls:
@@ -319,9 +357,11 @@ You are running as a background job, not in conversation.
 
 IMPORTANT:
 - Be efficient with tool calls (max 10-12 total) - prefer search snippets over fetching full pages
-- When the job specifies "How To Notify" with a Discord channel, you MUST send a message there
-- To send Discord messages: first call mcp-discord__discord_login, then mcp-discord__discord_send
-- ALWAYS complete by sending the Discord message - this is your PRIMARY deliverable
+- Follow the job's "## How To Notify" section EXACTLY - it names the tool to use
+  (e.g. send_whatsapp_to_me, or a Discord/email tool). Call ONLY that tool.
+- Use ONLY tools that are actually available to you. Do not invent or call tools
+  that were not provided (e.g. don't call Discord tools for a WhatsApp job).
+- Sending the notification is your PRIMARY deliverable - always complete it.
 - After sending, respond with [ALERT] if significant news, [NO_ALERT] if routine update
 - Keep your final response concise (this runs automatically)
 

@@ -33,7 +33,7 @@
       "env": {
         "DISCORD_TOKEN": "${DISCORD_TOKEN}"
       },
-      "enabled": true,
+      "enabled": false,
       "tools": [
         "send_discord_message",
         "fetch_discord_messages"
@@ -41,18 +41,29 @@
       "description": "Send and fetch messages from Discord channels"
     },
     "whatsapp": {
-      "description": "Send WhatsApp messages via Baileys",
-      "command": "node",
+      "description": "Send WhatsApp messages via the PAAW WhatsApp bot (Baileys). Talks to the bot's HTTP bridge - it does NOT open its own WhatsApp session.",
+      "command": "docker",
       "args": [
-        "mcp/whatsapp-baileys/index.js"
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "WHATSAPP_BRIDGE_URL",
+        "paaw/whatsapp:latest",
+        "node",
+        "index.js"
       ],
+      "env": {
+        "WHATSAPP_BRIDGE_URL": "http://host.docker.internal:3000"
+      },
       "enabled": true,
       "tools": [
-        "send_message",
-        "send_to_group",
-        "list_groups"
+        "send_whatsapp_message",
+        "send_whatsapp_to_group",
+        "send_whatsapp_to_me",
+        "list_whatsapp_groups"
       ],
-      "_note": "WhatsApp MCP runs in the whatsapp Docker container. Enable this only if running PAAW locally (not in Docker)."
+      "_note": "Requires the 'whatsapp' service running (it owns the WhatsApp session + bridge on :3000). Set enabled:true to let jobs notify via WhatsApp."
     }
   },
   "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."

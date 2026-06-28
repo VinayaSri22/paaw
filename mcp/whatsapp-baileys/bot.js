@@ -1,23 +1,30 @@
 /**
  * WhatsApp Bot for PAAW.
- * 
- * Listens for incoming WhatsApp messages and forwards them to PAAW's API,
- * allowing you to chat with PAAW from your phone.
- * 
+ *
+ * Two jobs in one process (sharing ONE Baileys connection):
+ *  1. Inbound chat: listens for owner messages -> PAAW /api/chat -> replies.
+ *  2. Outbound bridge: tiny HTTP server so PAAW jobs/MCP can send WhatsApp
+ *     messages WITHOUT opening a second WhatsApp session (which would corrupt
+ *     the signal sessions).
+ *
  * Usage:
  *   node bot.js
- * 
+ *
  * Environment:
- *   PAAW_URL - PAAW API URL (default: http://localhost:8080)
+ *   PAAW_URL  - PAAW API URL (default: http://localhost:8080)
+ *   HTTP_PORT - Outbound bridge port (default: 3000)
  */
 
+import http from 'http';
 import { getWhatsAppClient } from './whatsapp.js';
 
 const PAAW_URL = process.env.PAAW_URL || 'http://localhost:8080';
+const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 const TIMEOUT_MS = 120000; // 2 minutes for LLM responses
 
 console.log('🐾 PAAW WhatsApp Bot');
 console.log(`   PAAW API: ${PAAW_URL}`);
+console.log(`   Bridge port: ${HTTP_PORT}`);
 console.log('');
 
 /**
@@ -37,7 +44,9 @@ async function callPAAW(message, userId, username) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
-        user_id: `whatsapp_${userId.replace('@s.whatsapp.net', '').replace('@g.us', '')}`,
+        // Owner-only channel: always the single PAAW user, so the mental
+        // model stays consistent across web/CLI/Discord/WhatsApp.
+        user_id: 'user_default',
         channel: 'whatsapp',
         metadata: {
           username,
@@ -50,15 +59,21 @@ async function callPAAW(message, userId, username) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`PAAW API error: ${response.status}`);
+      const errText = await response.text().catch(() => '');
+      console.error(`PAAW API error: ${response.status} ${errText.slice(0, 300)}`);
       return null;
     }
 
     const data = await response.json();
-    return data.response || data.message || null;
+    const reply = data.response || data.message || null;
+    if (!reply) {
+      // Surface what PAAW actually returned so we can diagnose empty replies
+      console.error('PAAW returned no usable reply. Raw:', JSON.stringify(data).slice(0, 400));
+    }
+    return reply;
   } catch (err) {
     if (err.name === 'AbortError') {
-      console.error('PAAW API timeout');
+      console.error('PAAW API timeout (LLM took >120s)');
       return "Sorry, I'm taking too long to respond. Try again?";
     }
     console.error('Error calling PAAW:', err.message);
@@ -70,9 +85,7 @@ async function callPAAW(message, userId, username) {
  * Handle incoming WhatsApp messages.
  */
 async function handleMessage(jid, text, pushName, isGroup) {
-  // For groups, only respond if mentioned (you can customize this)
-  // For now, respond to all messages (private and group)
-  
+  // This only fires for the owner's self-chat (gated in whatsapp.js).
   console.log(`💬 Processing message from ${pushName}...`);
 
   const response = await callPAAW(text, jid, pushName);
@@ -100,10 +113,108 @@ async function handleMessage(jid, text, pushName, isGroup) {
       }
     }
     
-    console.log(`✅ Responded to ${pushName}`);
+    console.log(`✅ Responded to owner`);
   } else {
-    console.log(`⚠️ No response from PAAW for ${pushName}`);
+    console.log(`⚠️ No response from PAAW`);
   }
+}
+
+/**
+ * Read and JSON-parse an HTTP request body.
+ */
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(payload));
+}
+
+/**
+ * Outbound HTTP bridge - lets PAAW jobs/MCP send WhatsApp messages through
+ * the single live connection. Endpoints:
+ *   GET  /health             -> { ok, connected, mode }
+ *   GET  /groups             -> { groups: [...] }
+ *   POST /send  { message, to? , phone?, group? }
+ *        - no target  -> default target for the active mode (notify owner)
+ *        - phone      -> a specific number (country code, no +)
+ *        - group      -> a group by name (partial match)
+ *        - to         -> a raw JID
+ */
+function startBridge(client) {
+  const server = http.createServer(async (req, res) => {
+    try {
+      if (req.method === 'GET' && req.url === '/health') {
+        return sendJson(res, 200, {
+          ok: true,
+          connected: client.connected,
+          mode: client.mode,
+        });
+      }
+
+      if (req.method === 'GET' && req.url === '/groups') {
+        const groups = await client.listGroups();
+        return sendJson(res, 200, { groups });
+      }
+
+      if (req.method === 'POST' && req.url === '/send') {
+        if (!client.connected) {
+          return sendJson(res, 503, { error: 'WhatsApp not connected' });
+        }
+
+        const body = await readJsonBody(req);
+        const message = (body.message || '').toString();
+        if (!message) {
+          return sendJson(res, 400, { error: 'message is required' });
+        }
+
+        // Resolve target
+        if (body.group) {
+          const result = await client.sendToGroup(body.group, message);
+          if (result.error) return sendJson(res, 404, result);
+          return sendJson(res, 200, { ok: true, ...result });
+        }
+
+        let targetJid = body.to || null;
+        if (!targetJid && body.phone) {
+          targetJid = `${body.phone.toString().replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+        }
+        if (!targetJid) targetJid = client.defaultTarget;
+
+        if (!targetJid) {
+          return sendJson(res, 400, {
+            error: 'No target resolved. Provide phone/group/to, or configure the active mode.',
+          });
+        }
+
+        await client.sendMessage(targetJid, message);
+        return sendJson(res, 200, { ok: true, to: targetJid });
+      }
+
+      sendJson(res, 404, { error: 'Not found' });
+    } catch (err) {
+      console.error('Bridge error:', err);
+      sendJson(res, 500, { error: err.message });
+    }
+  });
+
+  server.listen(HTTP_PORT, () => {
+    console.log(`🌉 Outbound bridge listening on :${HTTP_PORT}`);
+  });
+
+  return server;
 }
 
 /**
@@ -114,6 +225,9 @@ async function main() {
 
   // Connect with message handler
   await client.connect(handleMessage);
+
+  // Start the outbound HTTP bridge for jobs/MCP
+  startBridge(client);
 
   console.log('');
   console.log('📱 WhatsApp bot is running!');

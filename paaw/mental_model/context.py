@@ -138,6 +138,7 @@ class ContextBuilder:
         user_message: str,
         user_id: str = "user_default",
         include_instructions: bool = True,
+        lite: bool = False,
     ) -> ConversationContext:
         """
         Build complete context for a conversation turn.
@@ -155,6 +156,31 @@ class ContextBuilder:
         
         # Get root-level nodes
         root_nodes = await self.db.get_root_nodes(user_id)
+        
+        # Lite mode: compact prompt for small-context local models.
+        # Skip semantic search, memories, capabilities and tag instructions -
+        # just give the model the user's identity and high-level mental model.
+        if lite:
+            keywords = extract_keywords(user_message)
+            system_prompt = self._build_system_prompt(
+                user_node=user_node,
+                root_nodes=root_nodes,
+                matched_nodes=[],
+                matched_memories=[],
+                skills=[],
+                tools=[],
+                include_instructions=False,
+            )
+            return ConversationContext(
+                system_prompt=system_prompt,
+                user_node=user_node,
+                root_nodes=root_nodes,
+                matched_nodes=[],
+                matched_memories=[],
+                keywords=keywords,
+                skills=[],
+                tools=[],
+            )
         
         # Extract keywords and search for relevant nodes
         keywords = extract_keywords(user_message)

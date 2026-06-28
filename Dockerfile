@@ -31,9 +31,19 @@ WORKDIR /app
 # Create non-root user
 RUN groupadd -r paaw && useradd -r -g paaw paaw
 
-# Install runtime dependencies
+# Install runtime dependencies + Docker CLI (so the job executor can spawn
+# MCP servers via `docker run` against the host's mounted docker socket).
+# Only the CLI is installed (docker-ce-cli), not the daemon.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ca-certificates \
+    gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

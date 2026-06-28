@@ -14,6 +14,9 @@ status: active
 ## Uses Skill
 web_researcher
 
+## Uses Tools
+searxng, whatsapp
+
 ## Goal
 What the job should accomplish.
 
@@ -65,6 +68,11 @@ class JobDefinition:
     
     # Skill (HOW to do the work)
     uses_skill: str = ""             # Skill ID (e.g., "web_researcher")
+    
+    # MCP servers this job needs (e.g., ["searxng", "whatsapp"]). When set, the
+    # executor only loads these servers' tools - keeps the prompt small so the
+    # model has room to act. Empty = load all enabled MCP tools.
+    uses_tools: list[str] = field(default_factory=list)
     
     # What to do (WHAT)
     goal: str = ""
@@ -168,6 +176,15 @@ def parse_job_md(job_path: Path) -> JobDefinition | None:
     # Uses Skill (new field - HOW to do the work)
     if "Uses Skill" in sections:
         job.uses_skill = sections["Uses Skill"].strip()
+    
+    # Uses Tools (which MCP servers this job needs - keeps prompt small)
+    if "Uses Tools" in sections:
+        raw = sections["Uses Tools"].strip()
+        # Support both list items ("- searxng") and inline ("searxng, whatsapp")
+        items = _extract_list_items(raw)
+        if not items:
+            items = [t.strip() for t in re.split(r"[,\n]", raw) if t.strip()]
+        job.uses_tools = items
     
     # Goal
     if "Goal" in sections:

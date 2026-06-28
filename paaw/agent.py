@@ -26,8 +26,15 @@ from paaw.config import settings
 from paaw.models import AgentResponse, ChatMessage, MessageRole, UnifiedMessage
 from paaw.tools.mcp_client import MCPClient
 from paaw.mental_model.conversation import ConversationManager
+from paaw.scheduler.executor import _normalize_tool_parameters
 
 logger = structlog.get_logger()
+
+# Max number of recent conversation messages sent to the LLM per turn.
+# The full history is still kept in memory and persisted to the graph;
+# this only bounds the prompt size so small/local models don't get
+# overwhelmed (which caused empty completions).
+MAX_LLM_HISTORY_MESSAGES = 10
 
 
 @dataclass
@@ -134,7 +141,7 @@ class Agent:
                         "function": {
                             "name": f"{server_name}__{tool['name']}",
                             "description": tool.get("description", ""),
-                            "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
+                            "parameters": _normalize_tool_parameters(tool.get("inputSchema")),
                         }
                     })
                     
@@ -257,15 +264,21 @@ class Agent:
             while iteration < max_iterations:
                 iteration += 1
                 
-                # Prepare messages for this iteration
-                messages_for_llm = self.conversation_history.copy()
+                # Prepare messages for this iteration.
+                # Only send a recent window of history to the LLM (the full
+                # history stays in self.conversation_history and the graph).
+                # This keeps the prompt small enough for local/small models.
+                messages_for_llm = self.conversation_history[-MAX_LLM_HISTORY_MESSAGES:]
+                messages_for_llm = messages_for_llm.copy()
                 messages_for_llm.extend(tool_messages)
                 
-                # Call LLM with tools if available
+                # Call LLM with tools if available. In lite mode we omit tools
+                # entirely so the prompt stays small enough for tiny-context models.
+                use_tools = (not settings.lite_mode) and bool(self._tools_schema)
                 response = await self.llm.chat(
                     messages=messages_for_llm,
                     system_prompt=system_prompt,
-                    tools=self._tools_schema if self._tools_schema else None,
+                    tools=self._tools_schema if use_tools else None,
                     return_full_response=True,
                 )
                 
@@ -317,6 +330,19 @@ class Agent:
             
             # Parse the final response for mental model updates
             parsed = self._parse_response(final_content)
+            
+            # Fallback: never return a silent empty reply. Small/local models
+            # sometimes return empty content (or content that is entirely tags).
+            if not parsed.content.strip():
+                logger.warning(
+                    "Empty response from LLM - using fallback",
+                    raw_length=len(final_content or ""),
+                    model=self.llm.model,
+                )
+                parsed.content = (
+                    "Sorry, I couldn't generate a reply to that. "
+                    "Could you rephrase or try again?"
+                )
             
             # Add clean response to history
             assistant_msg = ChatMessage(
@@ -395,7 +421,7 @@ class Agent:
         stop_display = False  # Once we hit internal tags, stop showing anything
         
         async for chunk in self.llm.chat_stream(
-            messages=self.conversation_history,
+            messages=self.conversation_history[-MAX_LLM_HISTORY_MESSAGES:],
             system_prompt=system_prompt,
         ):
             full_response += chunk
@@ -466,6 +492,7 @@ class Agent:
         ctx = await self.context_builder.build_context(
             user_message=user_message,
             user_id=self._user_id,
+            lite=settings.lite_mode,
         )
         
         logger.debug(

@@ -1,16 +1,23 @@
 /**
- * WhatsApp MCP Server for PAAW.
- * 
- * Provides tools for sending WhatsApp messages from scheduled jobs.
- * 
- * Tools:
- *   - send_message: Send to a phone number
- *   - send_to_group: Send to a group by name
- *   - list_groups: List available groups
- * 
- * Usage:
+ * WhatsApp MCP Server for PAAW (HTTP bridge client).
+ *
+ * IMPORTANT: This MCP server does NOT open its own WhatsApp connection.
+ * A second Baileys session sharing the same auth would corrupt the signal
+ * sessions (Bad MAC errors). Instead, it forwards tool calls over HTTP to the
+ * long-running WhatsApp bot (bot.js), which owns the single live connection.
+ *
+ * Tools (parity with the Discord MCP):
+ *   - send_whatsapp_message : send to a phone number
+ *   - send_whatsapp_to_group: send to a group by name
+ *   - send_whatsapp_to_me   : send to the owner (default target for the mode)
+ *   - list_whatsapp_groups  : list available groups
+ *
+ * Usage (spawned by PAAW's job executor over stdio):
  *   node index.js
- *   (Communicates via stdio JSON-RPC for MCP protocol)
+ *
+ * Environment:
+ *   WHATSAPP_BRIDGE_URL - URL of the bot.js HTTP bridge
+ *                         (default: http://host.docker.internal:3000)
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -19,170 +26,120 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { getWhatsAppClient } from './whatsapp.js';
+
+const BRIDGE_URL = (process.env.WHATSAPP_BRIDGE_URL || 'http://host.docker.internal:3000').replace(/\/$/, '');
 
 const server = new Server(
-  {
-    name: 'whatsapp-baileys',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
+  { name: 'whatsapp', version: '2.0.0' },
+  { capabilities: { tools: {} } }
 );
 
-// Tool definitions
 const TOOLS = [
   {
-    name: 'send_message',
-    description: 'Send a WhatsApp message to a phone number. Use the phone number with country code (e.g., 919876543210 for India +91).',
+    name: 'send_whatsapp_message',
+    description: 'Send a WhatsApp message to a phone number (country code, no + sign, e.g. 919876543210).',
     inputSchema: {
       type: 'object',
       properties: {
-        phone: {
-          type: 'string',
-          description: 'Phone number with country code, no + sign (e.g., 919876543210)',
-        },
-        message: {
-          type: 'string',
-          description: 'Message text to send',
-        },
+        phone: { type: 'string', description: 'Phone number with country code, no + (e.g. 919876543210)' },
+        message: { type: 'string', description: 'Message text to send' },
       },
       required: ['phone', 'message'],
     },
   },
   {
-    name: 'send_to_group',
-    description: 'Send a WhatsApp message to a group. The group name can be a partial match (case insensitive).',
+    name: 'send_whatsapp_to_group',
+    description: 'Send a WhatsApp message to a group by name (partial, case-insensitive match).',
     inputSchema: {
       type: 'object',
       properties: {
-        group_name: {
-          type: 'string',
-          description: 'Group name (partial match supported)',
-        },
-        message: {
-          type: 'string',
-          description: 'Message text to send',
-        },
+        group_name: { type: 'string', description: 'Group name (partial match supported)' },
+        message: { type: 'string', description: 'Message text to send' },
       },
       required: ['group_name', 'message'],
     },
   },
   {
-    name: 'list_groups',
-    description: 'List all available WhatsApp groups. Use this to find the correct group name before sending.',
+    name: 'send_whatsapp_to_me',
+    description: 'Send a WhatsApp message to the owner (PAAW user). Delivers to the configured chat for the active mode (Note-to-Self, the PAAW group, or your number). Use this for job notifications.',
     inputSchema: {
       type: 'object',
-      properties: {},
-      required: [],
+      properties: {
+        message: { type: 'string', description: 'Message text to send to the owner' },
+      },
+      required: ['message'],
     },
+  },
+  {
+    name: 'list_whatsapp_groups',
+    description: 'List available WhatsApp groups. Use to find the correct group name before sending.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
   },
 ];
 
-// Handle list tools request
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
-});
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
-// Handle tool calls
+async function bridgePost(path, body) {
+  const res = await fetch(`${BRIDGE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Bridge error ${res.status}`);
+  return data;
+}
+
+async function bridgeGet(path) {
+  const res = await fetch(`${BRIDGE_URL}${path}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Bridge error ${res.status}`);
+  return data;
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const client = getWhatsAppClient();
-
-  // Ensure connected
-  if (!client.connected) {
-    console.error('WhatsApp not connected, attempting to connect...');
-    await client.connect();
-    
-    // Wait for connection (up to 30 seconds)
-    let waited = 0;
-    while (!client.connected && waited < 30000) {
-      await new Promise(r => setTimeout(r, 1000));
-      waited += 1000;
-    }
-    
-    if (!client.connected) {
-      return {
-        content: [{ type: 'text', text: 'Error: WhatsApp not connected. Please scan QR code first.' }],
-        isError: true,
-      };
-    }
-  }
 
   try {
     switch (name) {
-      case 'send_message': {
-        const { phone, message } = args;
-        await client.sendToPhone(phone, message);
-        return {
-          content: [{ type: 'text', text: `Message sent to ${phone}` }],
-        };
+      case 'send_whatsapp_message': {
+        await bridgePost('/send', { phone: args.phone, message: args.message });
+        return { content: [{ type: 'text', text: `Message sent to ${args.phone}` }] };
       }
 
-      case 'send_to_group': {
-        const { group_name, message } = args;
-        const result = await client.sendToGroup(group_name, message);
-        
-        if (result.error) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true,
-          };
-        }
-        
-        return {
-          content: [{ type: 'text', text: `Message sent to group "${result.groupName}"` }],
-        };
+      case 'send_whatsapp_to_group': {
+        const result = await bridgePost('/send', { group: args.group_name, message: args.message });
+        return { content: [{ type: 'text', text: `Message sent to group "${result.groupName || args.group_name}"` }] };
       }
 
-      case 'list_groups': {
-        const groups = await client.listGroups();
-        
+      case 'send_whatsapp_to_me': {
+        const result = await bridgePost('/send', { message: args.message });
+        return { content: [{ type: 'text', text: `Message sent to owner (${result.to || 'default target'})` }] };
+      }
+
+      case 'list_whatsapp_groups': {
+        const { groups = [] } = await bridgeGet('/groups');
         if (groups.length === 0) {
-          return {
-            content: [{ type: 'text', text: 'No groups found.' }],
-          };
+          return { content: [{ type: 'text', text: 'No groups found.' }] };
         }
-        
-        const list = groups
-          .map(g => `- ${g.name} (${g.participantCount} members)`)
-          .join('\n');
-        
-        return {
-          content: [{ type: 'text', text: `Available groups:\n${list}` }],
-        };
+        const list = groups.map((g) => `- ${g.name} (${g.participantCount} members)`).join('\n');
+        return { content: [{ type: 'text', text: `Available groups:\n${list}` }] };
       }
 
       default:
-        return {
-          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     }
   } catch (err) {
-    console.error(`Tool error (${name}):`, err);
-    return {
-      content: [{ type: 'text', text: `Error: ${err.message}` }],
-      isError: true,
-    };
+    console.error(`Tool error (${name}):`, err.message);
+    return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
   }
 });
 
-// Main entry point
 async function main() {
-  console.error('🐾 PAAW WhatsApp MCP Server starting...');
-  
-  // Initialize WhatsApp connection
-  const client = getWhatsAppClient();
-  await client.connect();
-  
-  // Start MCP server
+  console.error('🐾 PAAW WhatsApp MCP Server (bridge client)');
+  console.error(`   Bridge: ${BRIDGE_URL}`);
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
   console.error('✅ MCP server running');
 }
 

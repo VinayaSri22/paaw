@@ -28,6 +28,11 @@ class LLMSettings(BaseSettings):
     # Optional: separate model for complex reasoning (defaults to same)
     reasoning_model: str = Field(default="claude-sonnet-4-6", description="Model for complex reasoning")
     
+    # Optional: separate model for background JOBS (web research, notifications).
+    # Jobs are agentic (need reliable tool-calling); a small local chat model
+    # often can't do this well. Leave unset to reuse default_model.
+    job_model: str | None = Field(default=None, description="Model for background jobs (defaults to default_model)")
+    
     # Embeddings are optional - will be added in Phase 3 for semantic search
     embedding_model: str | None = Field(default=None, description="Optional embedding model")
 
@@ -119,6 +124,12 @@ class Settings(BaseSettings):
     memory_decay_days: int = Field(default=7, ge=1)
     context_max_tokens: int = Field(default=4000, ge=100)
     recent_conversations_count: int = Field(default=5, ge=1)
+
+    # Lite mode: for small/local models with a tiny context window (e.g. 4k).
+    # Chat sends a compact system prompt with NO tool schemas and NO mental-model
+    # tag instructions, so the prompt fits and the model returns a plain reply.
+    # Background memory-building and tool use are skipped on the chat path.
+    lite_mode: bool = Field(default=False, alias="PAAW_LITE_MODE")
 
     @field_validator("log_level", mode="before")
     @classmethod

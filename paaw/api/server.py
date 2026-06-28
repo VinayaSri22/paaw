@@ -1843,9 +1843,17 @@ timeout_minutes: 30
             return JSONResponse({"error": "MCP server not found"}, status_code=404)
         
         current = config["mcpServers"][mcp_name].get("enabled", False)
-        config["mcpServers"][mcp_name]["enabled"] = not current
+        new_state = not current
+        config["mcpServers"][mcp_name]["enabled"] = new_state
         
-        mcp_file.write_text(json.dumps(config, indent=2))
+        try:
+            mcp_file.write_text(json.dumps(config, indent=2))
+        except OSError as e:
+            logger.error(f"Failed to write MCP config: {e}")
+            return JSONResponse(
+                {"error": f"Could not write servers.json ({e}). Ensure it is mounted read-write."},
+                status_code=500,
+            )
         
         # Sync to graph
         try:
@@ -1855,8 +1863,13 @@ timeout_minutes: 30
         except Exception as e:
             logger.error(f"Failed to sync MCP toggle: {e}")
         
-        logger.info(f"Toggled MCP {mcp_name}: {not current}")
-        return JSONResponse({"success": True, "enabled": not current})
+        logger.info(f"Toggled MCP {mcp_name}: {new_state}")
+        return JSONResponse({
+            "success": True,
+            "enabled": new_state,
+            "restart_required": True,
+            "message": "Saved. Restart PAAW for the tool change to take effect in jobs/chat.",
+        })
     
     @app.delete("/api/server-room/mcps/{mcp_name}")
     async def delete_mcp(mcp_name: str):

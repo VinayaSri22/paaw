@@ -15,8 +15,18 @@ services:
       - LOG_LEVEL=INFO
     env_file:
       - .env
+    # Run as root so the process can access the mounted docker socket.
+    # (Local single-user app; the executor needs to spawn MCP containers.)
+    user: root
     volumes:
       - ./configs:/app/configs:ro
+      # Mount servers.json read-write so the Server Room UI (enable/disable,
+      # add/remove MCP) can persist changes, and so edits apply on restart
+      # without rebuilding the image.
+      - ./mcp/servers.json:/app/mcp/servers.json
+      # Docker-out-of-docker: let the job executor spawn MCP containers via the
+      # host's docker daemon (searxng, discord, whatsapp MCP all use `docker run`).
+      - /var/run/docker.sock:/var/run/docker.sock
       - paaw-logs:/app/logs
     depends_on:
       postgres:
@@ -24,12 +34,8 @@ services:
       valkey:
         condition: service_healthy
     restart: unless-stopped
-    # Security: minimal permissions
     security_opt:
       - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
     mem_limit: 1g
     cpus: 2.0
 
@@ -84,9 +90,28 @@ services:
     build:
       context: ./mcp/whatsapp-baileys
       dockerfile: Dockerfile
+    # Tag the image so the job executor can spawn the MCP client from it
+    image: paaw/whatsapp:latest
     container_name: paaw-whatsapp
+    ports:
+      # Outbound bridge - lets PAAW jobs/MCP send WhatsApp via the live session
+      - "3000:3000"
     environment:
       - PAAW_URL=http://paaw:8080
+      - HTTP_PORT=3000
+      # Mode: 'self_chat' (Note-to-Self), 'group' (dedicated solo group on your
+      #       number), or 'dedicated' (separate number, responds to your number).
+      - WHATSAPP_MODE=${WHATSAPP_MODE:-self_chat}
+      # Owner identity overrides.
+      # self_chat mode: optional - auto-detected (OWNER_LID helps if detection misses).
+      # dedicated mode: OWNER_NUMBER is REQUIRED = your personal number (country code, no +).
+      # OWNER_NUMBER e.g. 918555934326   |   OWNER_LID e.g. 226589623238805
+      - OWNER_NUMBER=${OWNER_NUMBER:-}
+      - OWNER_LID=${OWNER_LID:-}
+      # Group mode: the group to talk in (default name "PAAW"). Set PAAW_GROUP_JID
+      # to pin an exact group id (e.g. 12036...@g.us) if name matching is ambiguous.
+      - PAAW_GROUP_NAME=${PAAW_GROUP_NAME:-PAAW}
+      - PAAW_GROUP_JID=${PAAW_GROUP_JID:-}
     volumes:
       - ./mcp/whatsapp-baileys/auth:/app/auth
     depends_on:
