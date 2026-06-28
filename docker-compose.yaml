@@ -26,10 +26,6 @@ services:
       - "0"
     volumes:
       - ./configs:/app/configs:ro
-      # Mount servers.json read-write so the Server Room UI (enable/disable,
-      # add/remove MCP) can persist changes, and so edits apply on restart
-      # without rebuilding the image.
-      - ./mcp/servers.json:/app/mcp/servers.json
       # Docker-out-of-docker: let the job executor spawn MCP containers via the
       # host's docker daemon (searxng + whatsapp MCP use `docker run --rm`).
       # The executor stops each container after the job so they don't linger.
@@ -41,8 +37,12 @@ services:
       valkey:
         condition: service_healthy
     restart: unless-stopped
+    # Security: minimal permissions
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     mem_limit: 1g
     cpus: 2.0
 
