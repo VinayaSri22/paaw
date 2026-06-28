@@ -105,16 +105,9 @@ class JobExecutor:
             return
         
         self._tools_schema = []
-
-        # Native in-process tools (web search + WhatsApp) call the existing
-        # HTTP services directly, so we don't spawn an MCP container per tool.
-        from paaw.tools.native_tools import get_native_tools_schema
-        self._tools_schema.extend(get_native_tools_schema())
-
         config_path = Path(__file__).parent.parent.parent / "mcp" / "servers.json"
         
         if not config_path.exists():
-            logger.info(f"Loaded {len(self._tools_schema)} tools for job execution")
             return
         
         with open(config_path) as f:
@@ -342,6 +335,32 @@ class JobExecutor:
             
             await self._store_trail(result, user_id)
             return result
+        
+        finally:
+            # Kill the MCP server containers this job used so they don't linger.
+            # The docker-based servers run with `--rm`, so stopping the process
+            # also removes the container. They restart on demand for the next job.
+            await self._cleanup_job_servers(job)
+    
+    async def _cleanup_job_servers(self, job: JobDefinition) -> None:
+        """Stop the MCP servers used by a job (container teardown after use)."""
+        try:
+            running = list(self.mcp_client.servers.keys())
+            if not running:
+                return
+            # If the job declared specific servers, only stop those; otherwise
+            # stop everything this executor started.
+            targets = (
+                [s for s in running if s in set(job.uses_tools)]
+                if job.uses_tools
+                else running
+            )
+            for server_name in targets:
+                await self.mcp_client.stop_server(server_name)
+            if targets:
+                logger.info(f"Stopped MCP servers after job {job.id}: {targets}")
+        except Exception as e:
+            logger.warning(f"Failed to stop MCP servers after job {job.id}: {e}")
     
     def _build_system_prompt(self, job: JobDefinition, user_context: dict, skill: SkillDefinition | None = None) -> str:
         """
@@ -461,11 +480,6 @@ Tool Output:
     async def _execute_tool(self, tool_name: str, arguments: dict) -> str:
         """Execute a tool and return result."""
         logger.info(f"Job executing tool: {tool_name}")
-
-        # Native in-process tools (no MCP container needed)
-        from paaw.tools.native_tools import is_native_tool, execute_native_tool
-        if is_native_tool(tool_name):
-            return await execute_native_tool(tool_name, arguments)
         
         if "__" in tool_name:
             server_name, actual_tool = tool_name.split("__", 1)

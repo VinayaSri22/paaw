@@ -31,16 +31,20 @@ WORKDIR /app
 # Create non-root user
 RUN groupadd -r paaw && useradd -r -g paaw paaw
 
-# Runtime dependencies:
-#   curl            - used by the HEALTHCHECK below
-#   ca-certificates - outbound TLS for native tools (web_url_read, etc.)
-# NOTE: the Docker CLI is intentionally NOT installed. Search + WhatsApp are now
-# native in-process tools, so the executor no longer spawns MCP containers via
-# `docker run`. Re-add docker-ce-cli (and the socket mount in compose) only if
-# you enable a docker-based MCP server in mcp/servers.json.
+# Install runtime dependencies + Docker CLI (so the job executor can spawn
+# MCP servers via `docker run` against the host's mounted docker socket).
+# Only the CLI is installed (docker-ce-cli), not the daemon. The executor stops
+# each MCP container (run with --rm) after the job so they don't linger.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -59,8 +63,13 @@ ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Create necessary directories
-RUN mkdir -p /app/logs && chown -R paaw:paaw /app
+# Create runtime dirs and hand the whole app tree to the non-root paaw user.
+# chmod u+rwX ensures paaw can read all files and write where needed; the
+# container then runs as paaw (not root) so a compromise can't touch the host
+# or root-owned files.
+RUN mkdir -p /app/logs \
+    && chown -R paaw:paaw /app \
+    && chmod -R u+rwX /app
 
 # Switch to non-root user
 USER paaw

@@ -13,25 +13,26 @@ services:
       - DATABASE_URL=postgresql://paaw:paaw@postgres:5432/paaw
       - VALKEY_URL=valkey://valkey:6379
       - LOG_LEVEL=INFO
-      # Native in-process tools call these services directly (no per-tool MCP
-      # container). Service names resolve on the compose network.
-      - SEARXNG_URL=http://searxng:8080
-      - WHATSAPP_BRIDGE_URL=http://whatsapp:3000
     env_file:
       - .env
-    # Run as root so the process can access the mounted docker socket.
-    # (Local single-user app; the executor needs to spawn MCP containers.)
-    user: root
+    # Run as the non-root 'paaw' user (uid 999) baked into the image - limits the
+    # blast radius if the app is ever compromised (can't touch root-owned files).
+    # The only privilege it needs is the docker socket, so we add group 0 (the
+    # socket's group) instead of running as root.
+    #   NOTE: group "0" matches the docker socket's group on Docker Desktop
+    #   (srw-rw---- root root). On native Linux the socket is usually group
+    #   'docker' - set this to that group's GID (e.g. `id -g docker`) instead.
+    group_add:
+      - "0"
     volumes:
       - ./configs:/app/configs:ro
       # Mount servers.json read-write so the Server Room UI (enable/disable,
       # add/remove MCP) can persist changes, and so edits apply on restart
       # without rebuilding the image.
       - ./mcp/servers.json:/app/mcp/servers.json
-      # Docker-out-of-docker: only needed if you ENABLE a docker-based MCP server
-      # in mcp/servers.json. The built-in search + WhatsApp tools are now native
-      # (in-process HTTP) and do NOT spawn containers. Safe to remove this mount
-      # (and `user: root`) if you don't use any docker-based MCP.
+      # Docker-out-of-docker: let the job executor spawn MCP containers via the
+      # host's docker daemon (searxng + whatsapp MCP use `docker run --rm`).
+      # The executor stops each container after the job so they don't linger.
       - /var/run/docker.sock:/var/run/docker.sock
       - paaw-logs:/app/logs
     depends_on:

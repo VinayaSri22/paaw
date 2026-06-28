@@ -63,8 +63,8 @@ WHATSAPP_MODE=self_chat        # self_chat | group | dedicated
 # Owner identity (your personal WhatsApp)
 #   self_chat: optional (auto-detected); set OWNER_LID if detection misses
 #   dedicated: OWNER_NUMBER REQUIRED (the number you message FROM)
-OWNER_NUMBER=918555934326      # country code, no +
-OWNER_LID=226589623238805      # your @lid (from the bot logs)
+OWNER_NUMBER=91855xxxx34326      # country code, no +
+OWNER_LID=2265xxx23238805      # your @lid (from the bot logs)
 
 # group mode only
 PAAW_GROUP_NAME=PAAW           # group name to match (default: PAAW)

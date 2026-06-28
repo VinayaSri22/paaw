@@ -7,6 +7,8 @@
         "run",
         "-i",
         "--rm",
+        "--user",
+        "1000:1000",
         "-e",
         "SEARXNG_URL",
         "isokoliuk/mcp-searxng:latest"
@@ -14,12 +16,12 @@
       "env": {
         "SEARXNG_URL": "http://host.docker.internal:8888"
       },
-      "enabled": false,
+      "enabled": true,
       "tools": [
         "searxng_web_search",
         "web_url_read"
       ],
-      "_note": "Disabled: replaced by PAAW's native in-process search tools (searxng__searxng_web_search / searxng__web_url_read) which call the SearXNG service over HTTP directly - no per-tool container. Set SEARXNG_URL on the paaw service to override."
+      "_note": "Spawned on demand via `docker run --rm`; the executor stops it after each job so the container doesn't linger. Reaches the SearXNG service via host.docker.internal:8888."
     },
     "mcp-discord": {
       "command": "docker",
@@ -48,6 +50,8 @@
         "run",
         "-i",
         "--rm",
+        "--user",
+        "1000:1000",
         "-e",
         "WHATSAPP_BRIDGE_URL",
         "paaw/whatsapp:latest",
@@ -57,14 +61,14 @@
       "env": {
         "WHATSAPP_BRIDGE_URL": "http://host.docker.internal:3000"
       },
-      "enabled": false,
+      "enabled": true,
       "tools": [
         "send_whatsapp_message",
         "send_whatsapp_to_group",
         "send_whatsapp_to_me",
         "list_whatsapp_groups"
       ],
-      "_note": "Disabled: replaced by PAAW's native in-process WhatsApp tools (whatsapp__send_whatsapp_to_me, etc.) which call the bot bridge (WHATSAPP_BRIDGE_URL, default http://whatsapp:3000) directly - no per-tool container. The 'whatsapp' service (bridge on :3000) must still be running."
+      "_note": "Spawned on demand via `docker run --rm` and stopped after each job (no lingering container). Forwards to the 'whatsapp' bot bridge via host.docker.internal:3000 - the 'whatsapp' service must be running and linked."
     }
   },
   "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."

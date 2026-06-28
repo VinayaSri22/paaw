@@ -41,7 +41,7 @@ User is a tech professional. Prefers bullet points over paragraphs. This is a
 quick morning briefing, not a deep dive.
 
 ## Note
-This is "paused" by default - set status to "active" to use it. WhatsApp
-notifications work out of the box via PAAW's native WhatsApp tools (no MCP
-server to enable); just make sure the `whatsapp` service is running and linked.
-See mcp/whatsapp-baileys/README.md.
+This is "paused" by default - set status to "active" to use it. Requires the
+`whatsapp` MCP server enabled in mcp/servers.json (it is by default) and the
+`whatsapp` service running and linked. The MCP container is spawned per run and
+stopped afterwards. See mcp/whatsapp-baileys/README.md.
