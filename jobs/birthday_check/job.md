@@ -5,6 +5,9 @@ created: 2026-03-01
 created_by: system
 status: active
 
+## Uses Tools
+whatsapp
+
 ## Goal
 Check for upcoming birthdays in the next 7 days and remind user to prepare wishes or gifts.
 
@@ -23,10 +26,13 @@ cron: 0 9 * * *
 timezone: Asia/Kolkata
 
 ## How To Notify
-Post to #general channel on Discord if there's an upcoming birthday.
+IMPORTANT: If there's an upcoming birthday, you MUST send a reminder to me on
+WhatsApp using the send_whatsapp_to_me tool. It delivers to my configured chat
+automatically (Note-to-Self, the PAAW group, or my number - depending on mode).
+Only message when there's an upcoming birthday worth flagging.
 
 ## Tools Required
-(none - uses mental model only)
+whatsapp (to send the reminder) - birthday data comes from the mental model.
 
 ## Related Context
 - domain: personal

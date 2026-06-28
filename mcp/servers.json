@@ -14,11 +14,12 @@
       "env": {
         "SEARXNG_URL": "http://host.docker.internal:8888"
       },
-      "enabled": true,
+      "enabled": false,
       "tools": [
         "searxng_web_search",
         "web_url_read"
-      ]
+      ],
+      "_note": "Disabled: replaced by PAAW's native in-process search tools (searxng__searxng_web_search / searxng__web_url_read) which call the SearXNG service over HTTP directly - no per-tool container. Set SEARXNG_URL on the paaw service to override."
     },
     "mcp-discord": {
       "command": "docker",
@@ -56,14 +57,14 @@
       "env": {
         "WHATSAPP_BRIDGE_URL": "http://host.docker.internal:3000"
       },
-      "enabled": true,
+      "enabled": false,
       "tools": [
         "send_whatsapp_message",
         "send_whatsapp_to_group",
         "send_whatsapp_to_me",
         "list_whatsapp_groups"
       ],
-      "_note": "Requires the 'whatsapp' service running (it owns the WhatsApp session + bridge on :3000). Set enabled:true to let jobs notify via WhatsApp."
+      "_note": "Disabled: replaced by PAAW's native in-process WhatsApp tools (whatsapp__send_whatsapp_to_me, etc.) which call the bot bridge (WHATSAPP_BRIDGE_URL, default http://whatsapp:3000) directly - no per-tool container. The 'whatsapp' service (bridge on :3000) must still be running."
     }
   },
   "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."

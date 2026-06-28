@@ -105,9 +105,16 @@ class JobExecutor:
             return
         
         self._tools_schema = []
+
+        # Native in-process tools (web search + WhatsApp) call the existing
+        # HTTP services directly, so we don't spawn an MCP container per tool.
+        from paaw.tools.native_tools import get_native_tools_schema
+        self._tools_schema.extend(get_native_tools_schema())
+
         config_path = Path(__file__).parent.parent.parent / "mcp" / "servers.json"
         
         if not config_path.exists():
+            logger.info(f"Loaded {len(self._tools_schema)} tools for job execution")
             return
         
         with open(config_path) as f:
@@ -454,6 +461,11 @@ Tool Output:
     async def _execute_tool(self, tool_name: str, arguments: dict) -> str:
         """Execute a tool and return result."""
         logger.info(f"Job executing tool: {tool_name}")
+
+        # Native in-process tools (no MCP container needed)
+        from paaw.tools.native_tools import is_native_tool, execute_native_tool
+        if is_native_tool(tool_name):
+            return await execute_native_tool(tool_name, arguments)
         
         if "__" in tool_name:
             server_name, actual_tool = tool_name.split("__", 1)

@@ -31,19 +31,16 @@ WORKDIR /app
 # Create non-root user
 RUN groupadd -r paaw && useradd -r -g paaw paaw
 
-# Install runtime dependencies + Docker CLI (so the job executor can spawn
-# MCP servers via `docker run` against the host's mounted docker socket).
-# Only the CLI is installed (docker-ce-cli), not the daemon.
+# Runtime dependencies:
+#   curl            - used by the HEALTHCHECK below
+#   ca-certificates - outbound TLS for native tools (web_url_read, etc.)
+# NOTE: the Docker CLI is intentionally NOT installed. Search + WhatsApp are now
+# native in-process tools, so the executor no longer spawns MCP containers via
+# `docker run`. Re-add docker-ce-cli (and the socket mount in compose) only if
+# you enable a docker-based MCP server in mcp/servers.json.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    gnupg \
-    && install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-       > /etc/apt/sources.list.d/docker.list \
-    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

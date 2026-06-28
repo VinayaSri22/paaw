@@ -115,6 +115,11 @@ class Agent:
         from paaw.tools.conversation_tools import get_conversation_tools_schema
         self._tools_schema.extend(get_conversation_tools_schema())
         logger.info("Added conversation history tools")
+
+        # Native in-process tools (web search + WhatsApp) - call HTTP services
+        # directly instead of spawning an MCP container per tool.
+        from paaw.tools.native_tools import get_native_tools_schema
+        self._tools_schema.extend(get_native_tools_schema())
         
         # Load MCP tools
         config_path = Path(__file__).parent.parent / "mcp" / "servers.json"
@@ -174,6 +179,11 @@ class Agent:
             conv_tools = ConversationTools(self.db, self._user_id)
             result = await conv_tools.search_conversations(arguments.get("query", ""))
             return json.dumps(result, indent=2, default=str)
+
+        # Native in-process tools (no MCP container needed)
+        from paaw.tools.native_tools import is_native_tool, execute_native_tool
+        if is_native_tool(tool_name):
+            return await execute_native_tool(tool_name, arguments)
         
         # Handle MCP tools (server__tool format)
         if "__" in tool_name:

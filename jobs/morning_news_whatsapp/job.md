@@ -41,6 +41,7 @@ User is a tech professional. Prefers bullet points over paragraphs. This is a
 quick morning briefing, not a deep dive.
 
 ## Note
-This is the WhatsApp twin of the `morning_news` job (which uses Discord).
-It is "paused" by default - set status to "active" and enable the `whatsapp`
-MCP server in mcp/servers.json to use it. See mcp/whatsapp-baileys/README.md.
+This is "paused" by default - set status to "active" to use it. WhatsApp
+notifications work out of the box via PAAW's native WhatsApp tools (no MCP
+server to enable); just make sure the `whatsapp` service is running and linked.
+See mcp/whatsapp-baileys/README.md.
