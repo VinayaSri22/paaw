@@ -78,6 +78,25 @@ services:
     command: valkey-server --appendonly yes
 
   # =============================================================================
+  # WhatsApp Bot (Baileys) - Chat with PAAW via WhatsApp
+  # =============================================================================
+  whatsapp:
+    build:
+      context: ./mcp/whatsapp-baileys
+      dockerfile: Dockerfile
+    container_name: paaw-whatsapp
+    environment:
+      - PAAW_URL=http://paaw:8080
+    volumes:
+      - ./mcp/whatsapp-baileys/auth:/app/auth
+    depends_on:
+      - paaw
+    restart: unless-stopped
+    # Keep running to maintain WhatsApp connection
+    tty: true
+    stdin_open: true
+
+  # =============================================================================
   # SearXNG - Privacy-respecting meta search engine (no API keys needed!)
   # =============================================================================
   searxng:

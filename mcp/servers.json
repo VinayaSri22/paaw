@@ -39,6 +39,20 @@
         "fetch_discord_messages"
       ],
       "description": "Send and fetch messages from Discord channels"
+    },
+    "whatsapp": {
+      "description": "Send WhatsApp messages via Baileys",
+      "command": "node",
+      "args": [
+        "mcp/whatsapp-baileys/index.js"
+      ],
+      "enabled": true,
+      "tools": [
+        "send_message",
+        "send_to_group",
+        "list_groups"
+      ],
+      "_note": "WhatsApp MCP runs in the whatsapp Docker container. Enable this only if running PAAW locally (not in Docker)."
     }
   },
   "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."

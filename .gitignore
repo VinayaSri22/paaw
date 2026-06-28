@@ -111,3 +111,10 @@ temp/
 
 # Audit logs (may contain sensitive data)
 audit_logs/
+
+# =============================================================================
+# WhatsApp (Baileys)
+# =============================================================================
+# Session credentials - NEVER commit these!
+mcp/whatsapp-baileys/auth/
+!mcp/whatsapp-baileys/auth/.gitkeep

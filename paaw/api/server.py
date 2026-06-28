@@ -349,6 +349,7 @@ def register_routes(app: FastAPI):
             "web": Channel.WEB,
             "discord": Channel.CLI,  # Reuse CLI for external channels
             "slack": Channel.CLI,
+            "whatsapp": Channel.CLI,
             "cli": Channel.CLI,
         }
         channel = channel_map.get(channel_name, Channel.WEB)
