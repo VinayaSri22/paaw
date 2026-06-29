@@ -51,6 +51,57 @@ class MCPClient:
                 self._config = {"mcpServers": {}}
         return self._config
     
+    def _packages_dir(self) -> Path:
+        """Directory used as the npm --prefix for runtime-installed MCP servers."""
+        return Path(
+            os.environ.get(
+                "MCP_PACKAGES_DIR",
+                str(Path(__file__).parent.parent.parent / "mcp"),
+            )
+        )
+    
+    async def _ensure_package_installed(self, package: str) -> bool:
+        """
+        Ensure an npm package is installed for an MCP server.
+
+        MCP servers are NOT baked into the image - they're installed on first use
+        into <MCP_PACKAGES_DIR>/node_modules (persisted via a volume). Subsequent
+        starts skip the install. Returns True if the package is available.
+        """
+        packages_dir = self._packages_dir()
+        node_modules = packages_dir / "node_modules"
+        if (node_modules / package).exists():
+            return True
+
+        packages_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Installing MCP package: {package} -> {packages_dir}")
+
+        env = os.environ.copy()
+        # The non-root paaw user has no usable HOME, so npm can't write its cache
+        # at ~/.npm. Point HOME/cache at a writable location for the install.
+        env.setdefault("HOME", "/tmp")
+        env.setdefault("npm_config_cache", "/tmp/.npm-cache")
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "npm", "install", "--prefix", str(packages_dir),
+                "--no-audit", "--no-fund", "--omit=dev", package,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode == 0:
+                logger.info(f"Installed MCP package: {package}")
+                return True
+            logger.error(
+                f"Failed to install {package}: "
+                f"{stderr.decode(errors='ignore')[:500]}"
+            )
+            return False
+        except Exception as e:
+            logger.error(f"Error installing MCP package {package}: {e}")
+            return False
+    
     async def start_server(self, server_name: str) -> bool:
         """Start an MCP server process."""
         if server_name in self.servers:
@@ -67,6 +118,13 @@ class MCPClient:
         if not server_config.get("enabled", False):
             logger.warning(f"Server not enabled: {server_name}")
             return False
+        
+        # Auto-install the server's npm package on first use (no image rebuild).
+        package = server_config.get("package")
+        if package:
+            if not await self._ensure_package_installed(package):
+                logger.error(f"Could not install package for {server_name}: {package}")
+                return False
         
         command = server_config.get("command")
         args = server_config.get("args", [])
@@ -86,6 +144,11 @@ class MCPClient:
         local_bin = os.path.expanduser("~/.local/bin")
         if local_bin not in env.get("PATH", ""):
             env["PATH"] = f"{local_bin}:{env.get('PATH', '')}"
+        
+        # Make runtime-installed MCP server binaries resolvable on PATH.
+        node_bin = str(self._packages_dir() / "node_modules" / ".bin")
+        if node_bin not in env.get("PATH", ""):
+            env["PATH"] = f"{node_bin}:{env.get('PATH', '')}"
         
         # Find the command
         cmd_path = shutil.which(command, path=env.get("PATH"))

@@ -31,12 +31,12 @@ WORKDIR /app
 # Create non-root user
 RUN groupadd -r paaw && useradd -r -g paaw paaw
 
-# Runtime dependencies + Node.js.
+# Runtime dependencies + Node.js RUNTIME only (no MCP servers baked in).
 #   curl / ca-certificates : healthcheck + outbound TLS
-#   nodejs (+ npm)         : runs the MCP servers as LOCAL subprocesses, so we
-#                            no longer need `docker run` or the docker socket.
-# mcp-searxng is installed globally; the WhatsApp MCP's SDK is installed later
-# (after the source is copied in).
+#   nodejs (+ npm)         : runs the MCP servers as LOCAL subprocesses.
+# The MCP servers themselves are NOT installed here - they are auto-installed on
+# first use at runtime into /app/mcp/node_modules (see paaw/tools/mcp_client.py).
+# That means adding a new MCP = editing mcp/servers.json, with no image rebuild.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
@@ -46,8 +46,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
        > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g mcp-searxng \
-    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -60,29 +58,24 @@ COPY jobs/ /app/jobs/
 COPY skills/ /app/skills/
 COPY mcp/ /app/mcp/
 
-# The WhatsApp MCP server (mcp/whatsapp-baileys/index.js) is a thin stdio client
-# to the bridge - its ONLY runtime dependency is the MCP SDK (baileys & friends
-# belong to the always-on bridge service, not here). Install just the SDK so the
-# image stays small and PAAW can launch `node index.js` as a subprocess.
-# Temporarily hide the bridge's package.json so npm only resolves the SDK and
-# not the heavy baileys tree (which pulls a git-based dep we don't want here).
-RUN cd /app/mcp/whatsapp-baileys \
-    && mv package.json package.json.bridge \
-    && npm install --no-save --omit=dev @modelcontextprotocol/sdk@^1.0.0 \
-    && mv package.json.bridge package.json \
-    && npm cache clean --force
-
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Where MCP servers are auto-installed at runtime (npm --prefix). node_modules
+# lands at /app/mcp/node_modules, which is an ancestor of the local WhatsApp MCP
+# (mcp/whatsapp-baileys/index.js) so Node's parent-directory module lookup can
+# resolve its deps. It's also where the searxng/discord bins resolve their deps.
+ENV MCP_PACKAGES_DIR=/app/mcp
 
 # Create runtime dirs and hand the whole app tree to the non-root paaw user.
+# We pre-create /app/mcp/node_modules so that when the named volume is mounted
+# there it initialises owned by paaw (named volumes inherit the image path's
+# ownership) - otherwise it would be root-owned and runtime npm installs fail.
 # chmod u+rwX ensures paaw can read all files and write where needed; the
-# container then runs as paaw (not root) so a compromise can't touch the host
-# or root-owned files.
-RUN mkdir -p /app/logs \
+# container then runs as paaw (not root) so a compromise can't touch the host.
+RUN mkdir -p /app/logs /app/mcp/node_modules \
     && chown -R paaw:paaw /app \
     && chmod -R u+rwX /app
 

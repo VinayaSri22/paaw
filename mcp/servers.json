@@ -2,28 +2,24 @@
   "mcpServers": {
     "searxng": {
       "description": "Web search via SearXNG (meta search - Google, Bing, DuckDuckGo, etc.)",
+      "package": "mcp-searxng",
       "command": "mcp-searxng",
       "args": [],
       "env": {
-        "SEARXNG_URL": "http://searxng:8080"
+        "SEARXNG_URL": "${SEARXNG_URL}"
       },
       "enabled": true,
       "tools": [
         "searxng_web_search",
         "web_url_read"
       ],
-      "_note": "Runs as a LOCAL subprocess (mcp-searxng, installed in the PAAW image) - no docker, no socket. Reaches the SearXNG service over the compose network at searxng:8080. The executor stops the subprocess after each job."
+      "_note": "Auto-installed at runtime via npm into /app/mcp/node_modules (persisted in the mcp-packages volume) and run as a native subprocess - nothing baked into the image, no docker, no socket. Reaches SearXNG over the compose network (SEARXNG_URL=http://searxng:8080)."
     },
     "mcp-discord": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "DISCORD_TOKEN",
-        "mcp/mcp-discord"
-      ],
+      "description": "Send and fetch messages from Discord channels",
+      "package": "mcp-discord",
+      "command": "mcp-discord",
+      "args": [],
       "env": {
         "DISCORD_TOKEN": "${DISCORD_TOKEN}"
       },
@@ -31,11 +27,11 @@
       "tools": [
         "send_discord_message",
         "fetch_discord_messages"
-      ],
-      "description": "Send and fetch messages from Discord channels"
+      ]
     },
     "whatsapp": {
       "description": "Send WhatsApp messages via the PAAW WhatsApp bot (Baileys). Talks to the bot's HTTP bridge - it does NOT open its own WhatsApp session.",
+      "package": "@modelcontextprotocol/sdk",
       "command": "node",
       "args": [
         "/app/mcp/whatsapp-baileys/index.js"
@@ -50,8 +46,8 @@
         "send_whatsapp_to_me",
         "list_whatsapp_groups"
       ],
-      "_note": "Runs as a LOCAL subprocess (node index.js, shipped in the PAAW image) - no docker, no socket. Forwards to the always-on 'whatsapp' bridge service over the compose network at whatsapp:3000. The executor stops the subprocess after each job."
+      "_note": "Local MCP shipped with PAAW (mcp/whatsapp-baileys/index.js), run as a native subprocess. Its only dependency (the MCP SDK) is auto-installed at runtime into /app/mcp/node_modules, which index.js resolves via Node's parent-directory module lookup. Forwards to the always-on 'whatsapp' bridge at whatsapp:3000."
     }
   },
-  "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."
+  "_comment": "MCP servers are auto-installed at runtime - add a 'package' field (npm package name) and they install on first use into /app/mcp/node_modules. No image rebuild needed. Use ${VAR} for environment variables and set 'enabled: true' to activate."
 }

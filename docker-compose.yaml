@@ -12,15 +12,19 @@ services:
     environment:
       - DATABASE_URL=postgresql://paaw:paaw@postgres:5432/paaw
       - VALKEY_URL=valkey://valkey:6379
+      - SEARXNG_URL=http://searxng:8080
       - LOG_LEVEL=INFO
     env_file:
       - .env
-    # Runs as the non-root 'paaw' user baked into the image. MCP servers now run
-    # as plain subprocesses inside this container (node / mcp-searxng), so there's
-    # NO docker socket mount and no extra group membership to grant - smaller
-    # attack surface.
+    # Runs as the non-root 'paaw' user baked into the image. MCP servers are NOT
+    # baked into the image - they auto-install on first use into /app/mcp/node_modules
+    # and run as plain subprocesses (node / npm-installed bins). No docker socket,
+    # no extra group membership - smaller attack surface.
     volumes:
       - ./configs:/app/configs:ro
+      # Persist runtime-installed MCP packages so they survive restarts and don't
+      # re-download every boot (mounted on the node_modules under MCP_PACKAGES_DIR).
+      - mcp-packages:/app/mcp/node_modules
       - paaw-logs:/app/logs
     depends_on:
       postgres:
@@ -31,7 +35,6 @@ services:
     # Security: minimal permissions
     security_opt:
       - no-new-privileges:true
-    read_only: true
     tmpfs:
       - /tmp
     mem_limit: 1g
@@ -140,5 +143,7 @@ volumes:
     name: paaw-postgres-data
   paaw-valkey:
     name: paaw-valkey-data
+  mcp-packages:
+    name: paaw-mcp-packages
   paaw-logs:
     name: paaw-logs
