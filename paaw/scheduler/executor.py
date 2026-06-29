@@ -337,13 +337,14 @@ class JobExecutor:
             return result
         
         finally:
-            # Kill the MCP server containers this job used so they don't linger.
-            # The docker-based servers run with `--rm`, so stopping the process
-            # also removes the container. They restart on demand for the next job.
+            # Stop the MCP server subprocesses this job used so they don't linger.
+            # Each MCP server runs as a local child process (node / mcp-searxng),
+            # so stopping it just terminates that process. They restart on demand
+            # for the next job.
             await self._cleanup_job_servers(job)
     
     async def _cleanup_job_servers(self, job: JobDefinition) -> None:
-        """Stop the MCP servers used by a job (container teardown after use)."""
+        """Stop the MCP server subprocesses used by a job (teardown after use)."""
         try:
             running = list(self.mcp_client.servers.keys())
             if not running:

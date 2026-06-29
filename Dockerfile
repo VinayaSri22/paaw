@@ -31,20 +31,23 @@ WORKDIR /app
 # Create non-root user
 RUN groupadd -r paaw && useradd -r -g paaw paaw
 
-# Install runtime dependencies + Docker CLI (so the job executor can spawn
-# MCP servers via `docker run` against the host's mounted docker socket).
-# Only the CLI is installed (docker-ce-cli), not the daemon. The executor stops
-# each MCP container (run with --rm) after the job so they don't linger.
+# Runtime dependencies + Node.js.
+#   curl / ca-certificates : healthcheck + outbound TLS
+#   nodejs (+ npm)         : runs the MCP servers as LOCAL subprocesses, so we
+#                            no longer need `docker run` or the docker socket.
+# mcp-searxng is installed globally; the WhatsApp MCP's SDK is installed later
+# (after the source is copied in).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     gnupg \
-    && install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-       > /etc/apt/sources.list.d/docker.list \
-    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g mcp-searxng \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -56,6 +59,18 @@ COPY configs/ /app/configs/
 COPY jobs/ /app/jobs/
 COPY skills/ /app/skills/
 COPY mcp/ /app/mcp/
+
+# The WhatsApp MCP server (mcp/whatsapp-baileys/index.js) is a thin stdio client
+# to the bridge - its ONLY runtime dependency is the MCP SDK (baileys & friends
+# belong to the always-on bridge service, not here). Install just the SDK so the
+# image stays small and PAAW can launch `node index.js` as a subprocess.
+# Temporarily hide the bridge's package.json so npm only resolves the SDK and
+# not the heavy baileys tree (which pulls a git-based dep we don't want here).
+RUN cd /app/mcp/whatsapp-baileys \
+    && mv package.json package.json.bridge \
+    && npm install --no-save --omit=dev @modelcontextprotocol/sdk@^1.0.0 \
+    && mv package.json.bridge package.json \
+    && npm cache clean --force
 
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"

@@ -2,26 +2,17 @@
   "mcpServers": {
     "searxng": {
       "description": "Web search via SearXNG (meta search - Google, Bing, DuckDuckGo, etc.)",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--user",
-        "1000:1000",
-        "-e",
-        "SEARXNG_URL",
-        "isokoliuk/mcp-searxng:latest"
-      ],
+      "command": "mcp-searxng",
+      "args": [],
       "env": {
-        "SEARXNG_URL": "http://host.docker.internal:8888"
+        "SEARXNG_URL": "http://searxng:8080"
       },
       "enabled": true,
       "tools": [
         "searxng_web_search",
         "web_url_read"
       ],
-      "_note": "Spawned on demand via `docker run --rm`; the executor stops it after each job so the container doesn't linger. Reaches the SearXNG service via host.docker.internal:8888."
+      "_note": "Runs as a LOCAL subprocess (mcp-searxng, installed in the PAAW image) - no docker, no socket. Reaches the SearXNG service over the compose network at searxng:8080. The executor stops the subprocess after each job."
     },
     "mcp-discord": {
       "command": "docker",
@@ -45,21 +36,12 @@
     },
     "whatsapp": {
       "description": "Send WhatsApp messages via the PAAW WhatsApp bot (Baileys). Talks to the bot's HTTP bridge - it does NOT open its own WhatsApp session.",
-      "command": "docker",
+      "command": "node",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--user",
-        "1000:1000",
-        "-e",
-        "WHATSAPP_BRIDGE_URL",
-        "paaw/whatsapp:latest",
-        "node",
-        "index.js"
+        "/app/mcp/whatsapp-baileys/index.js"
       ],
       "env": {
-        "WHATSAPP_BRIDGE_URL": "http://host.docker.internal:3000"
+        "WHATSAPP_BRIDGE_URL": "http://whatsapp:3000"
       },
       "enabled": true,
       "tools": [
@@ -68,7 +50,7 @@
         "send_whatsapp_to_me",
         "list_whatsapp_groups"
       ],
-      "_note": "Spawned on demand via `docker run --rm` and stopped after each job (no lingering container). Forwards to the 'whatsapp' bot bridge via host.docker.internal:3000 - the 'whatsapp' service must be running and linked."
+      "_note": "Runs as a LOCAL subprocess (node index.js, shipped in the PAAW image) - no docker, no socket. Forwards to the always-on 'whatsapp' bridge service over the compose network at whatsapp:3000. The executor stops the subprocess after each job."
     }
   },
   "_comment": "Set 'enabled: true' to activate an MCP server. PAAW will start it automatically. Use ${VAR} for environment variables."

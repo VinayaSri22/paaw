@@ -15,21 +15,12 @@ services:
       - LOG_LEVEL=INFO
     env_file:
       - .env
-    # Run as the non-root 'paaw' user (uid 999) baked into the image - limits the
-    # blast radius if the app is ever compromised (can't touch root-owned files).
-    # The only privilege it needs is the docker socket, so we add group 0 (the
-    # socket's group) instead of running as root.
-    #   NOTE: group "0" matches the docker socket's group on Docker Desktop
-    #   (srw-rw---- root root). On native Linux the socket is usually group
-    #   'docker' - set this to that group's GID (e.g. `id -g docker`) instead.
-    group_add:
-      - "0"
+    # Runs as the non-root 'paaw' user baked into the image. MCP servers now run
+    # as plain subprocesses inside this container (node / mcp-searxng), so there's
+    # NO docker socket mount and no extra group membership to grant - smaller
+    # attack surface.
     volumes:
       - ./configs:/app/configs:ro
-      # Docker-out-of-docker: let the job executor spawn MCP containers via the
-      # host's docker daemon (searxng + whatsapp MCP use `docker run --rm`).
-      # The executor stops each container after the job so they don't linger.
-      - /var/run/docker.sock:/var/run/docker.sock
       - paaw-logs:/app/logs
     depends_on:
       postgres:
@@ -97,7 +88,6 @@ services:
     build:
       context: ./mcp/whatsapp-baileys
       dockerfile: Dockerfile
-    # Tag the image so the job executor can spawn the MCP client from it
     image: paaw/whatsapp:latest
     container_name: paaw-whatsapp
     ports:
